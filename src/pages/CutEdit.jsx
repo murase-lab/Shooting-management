@@ -47,8 +47,8 @@ const CutEdit = () => {
             });
             setOriginalImage(cut.originalImage || null);
             setAiGeneratedImage(cut.aiGeneratedImage || null);
-            setSelectedPropIds((cut.propIds || []).map(id => Number(id)));
-            setSelectedModelIds((cut.modelIds || []).map(id => Number(id)));
+            setSelectedPropIds((cut.propIds || []).map(id => String(id)));
+            setSelectedModelIds((cut.modelIds || []).map(id => String(id)));
             setIsInitialized(true);
         }
     }, [cut, isInitialized]);
@@ -141,20 +141,20 @@ const CutEdit = () => {
     };
 
     const togglePropSelection = (propId) => {
-        const numericId = Number(propId);
+        const stringId = String(propId);
         setSelectedPropIds(prev =>
-            prev.includes(numericId)
-                ? prev.filter(id => id !== numericId)
-                : [...prev, numericId]
+            prev.includes(stringId)
+                ? prev.filter(id => id !== stringId)
+                : [...prev, stringId]
         );
     };
 
     const toggleModelSelection = (modelId) => {
-        const numericId = Number(modelId);
+        const stringId = String(modelId);
         setSelectedModelIds(prev =>
-            prev.includes(numericId)
-                ? prev.filter(id => id !== numericId)
-                : [...prev, numericId]
+            prev.includes(stringId)
+                ? prev.filter(id => id !== stringId)
+                : [...prev, stringId]
         );
     };
 
@@ -375,7 +375,7 @@ const CutEdit = () => {
                             <p className="text-xs text-gray-500 -mt-1">このカットで使用するアイテムを選択</p>
                             <div className="grid grid-cols-2 gap-2 mt-1">
                                 {projectProps.map(prop => {
-                                    const isSelected = selectedPropIds.includes(Number(prop.id));
+                                    const isSelected = selectedPropIds.includes(String(prop.id));
                                     return (
                                     <button
                                         key={prop.id}
@@ -431,7 +431,7 @@ const CutEdit = () => {
                             <p className="text-xs text-gray-500 -mt-1">このカットで起用するモデルを選択（不要な場合は選択しない）</p>
                             <div className="grid grid-cols-2 gap-2 mt-1">
                                 {models.map(model => {
-                                    const isSelected = selectedModelIds.includes(Number(model.id));
+                                    const isSelected = selectedModelIds.includes(String(model.id));
                                     return (
                                     <button
                                         key={model.id}

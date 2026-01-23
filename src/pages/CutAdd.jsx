@@ -84,7 +84,7 @@ const CutAdd = () => {
         if (!prompt) {
             // 選択された商品情報を取得
             const selectedProduct = projectProps.find(p =>
-                p.category === 'product' && selectedPropIds.includes(p.id)
+                p.category === 'product' && selectedPropIds.includes(String(p.id))
             );
             prompt = buildImagePrompt(formData, selectedProduct);
         }
@@ -136,18 +136,20 @@ const CutAdd = () => {
     };
 
     const togglePropSelection = (propId) => {
+        const stringId = String(propId);
         setSelectedPropIds(prev =>
-            prev.includes(propId)
-                ? prev.filter(id => id !== propId)
-                : [...prev, propId]
+            prev.includes(stringId)
+                ? prev.filter(id => id !== stringId)
+                : [...prev, stringId]
         );
     };
 
     const toggleModelSelection = (modelId) => {
+        const stringId = String(modelId);
         setSelectedModelIds(prev =>
-            prev.includes(modelId)
-                ? prev.filter(id => id !== modelId)
-                : [...prev, modelId]
+            prev.includes(stringId)
+                ? prev.filter(id => id !== stringId)
+                : [...prev, stringId]
         );
     };
 
@@ -290,7 +292,7 @@ const CutAdd = () => {
 
                                 {/* スキップオプション */}
                                 <button
-                                    onClick={() => setStep(3)}
+                                    onClick={() => setStep(2)}
                                     className="w-full py-3 text-sm text-gray-500 hover:text-gray-700 transition-colors"
                                 >
                                     画像なしで続ける
@@ -305,12 +307,25 @@ const CutAdd = () => {
                     <section className="space-y-4 animate-fadeIn">
                         <div className="text-center mb-6">
                             <h2 className="text-xl font-bold mb-2">AI完成予想図を生成</h2>
-                            <p className="text-sm text-gray-500">プロンプトを入力してイメージを生成</p>
+                            <p className="text-sm text-gray-500">
+                                {imagePreview
+                                    ? 'プロンプトを入力してイメージを生成'
+                                    : 'プロンプトからイメージを生成（元画像なし）'}
+                            </p>
                         </div>
 
-                        <div className="aspect-[4/3] rounded-2xl overflow-hidden bg-black">
-                            <img src={imagePreview} alt="Original" className="w-full h-full object-contain" />
-                        </div>
+                        {imagePreview ? (
+                            <div className="aspect-[4/3] rounded-2xl overflow-hidden bg-black">
+                                <img src={imagePreview} alt="Original" className="w-full h-full object-contain" />
+                            </div>
+                        ) : (
+                            <div className="aspect-[4/3] rounded-2xl overflow-hidden bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                                <div className="text-center">
+                                    <span className="material-symbols-outlined text-5xl text-gray-400">image_not_supported</span>
+                                    <p className="text-sm text-gray-500 mt-2">元画像なし（プロンプトのみで生成）</p>
+                                </div>
+                            </div>
+                        )}
 
                         <div className="flex flex-col gap-2">
                             <label className="text-sm font-medium">生成プロンプト</label>
@@ -481,24 +496,26 @@ const CutAdd = () => {
                                     </label>
                                     <p className="text-xs text-gray-500 -mt-1">このカットで使用するアイテムを選択</p>
                                     <div className="grid grid-cols-2 gap-2 mt-1">
-                                        {projectProps.map(prop => (
+                                        {projectProps.map(prop => {
+                                            const isSelected = selectedPropIds.includes(String(prop.id));
+                                            return (
                                             <button
                                                 key={prop.id}
                                                 type="button"
                                                 onClick={() => togglePropSelection(prop.id)}
                                                 className={`p-3 rounded-xl border-2 text-left transition-all ${
-                                                    selectedPropIds.includes(prop.id)
+                                                    isSelected
                                                         ? 'border-primary bg-primary/10'
                                                         : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
                                                 }`}
                                             >
                                                 <div className="flex items-start gap-2">
                                                     <div className={`size-5 rounded border-2 flex items-center justify-center shrink-0 mt-0.5 ${
-                                                        selectedPropIds.includes(prop.id)
+                                                        isSelected
                                                             ? 'bg-primary border-primary text-white'
                                                             : 'border-gray-300'
                                                     }`}>
-                                                        {selectedPropIds.includes(prop.id) && (
+                                                        {isSelected && (
                                                             <span className="material-symbols-outlined text-sm">check</span>
                                                         )}
                                                     </div>
@@ -515,7 +532,8 @@ const CutAdd = () => {
                                                     </div>
                                                 </div>
                                             </button>
-                                        ))}
+                                            );
+                                        })}
                                     </div>
                                     {selectedPropIds.length > 0 && (
                                         <p className="text-xs text-primary font-medium">
@@ -534,13 +552,15 @@ const CutAdd = () => {
                                     </label>
                                     <p className="text-xs text-gray-500 -mt-1">このカットで起用するモデルを選択（不要な場合は選択しない）</p>
                                     <div className="grid grid-cols-2 gap-2 mt-1">
-                                        {models.map(model => (
+                                        {models.map(model => {
+                                            const isSelected = selectedModelIds.includes(String(model.id));
+                                            return (
                                             <button
                                                 key={model.id}
                                                 type="button"
                                                 onClick={() => toggleModelSelection(model.id)}
                                                 className={`p-3 rounded-xl border-2 text-left transition-all ${
-                                                    selectedModelIds.includes(model.id)
+                                                    isSelected
                                                         ? 'border-pink-500 bg-pink-50 dark:bg-pink-900/20'
                                                         : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
                                                 }`}
@@ -559,12 +579,13 @@ const CutAdd = () => {
                                                         <p className="text-sm font-medium truncate">{model.name}</p>
                                                         <p className="text-[10px] text-gray-500">{model.gender} / {model.age}歳</p>
                                                     </div>
-                                                    {selectedModelIds.includes(model.id) && (
+                                                    {isSelected && (
                                                         <span className="material-symbols-outlined text-pink-500">check_circle</span>
                                                     )}
                                                 </div>
                                             </button>
-                                        ))}
+                                            );
+                                        })}
                                     </div>
                                     {selectedModelIds.length > 0 && (
                                         <p className="text-xs text-pink-500 font-medium">
