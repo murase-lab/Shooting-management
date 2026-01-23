@@ -842,35 +842,51 @@ export const ProjectProvider = ({ children }) => {
             }
         }
 
-        // 1. 現在のステートからプロジェクトを取得（localStorageではなくステートを使用）
-        const currentProjects = [...projects];
+        // 関数型のステート更新を使用して最新のステートを取得
+        let newProjects = [];
+        setProjects(prevProjects => {
+            newProjects = prevProjects.map(project =>
+                String(project.id) === String(projectId)
+                    ? {
+                        ...project,
+                        cuts: (project.cuts || []).map(cut =>
+                            String(cut.id) === String(cutId) ? { ...cut, ...updatedCutData } : cut
+                        )
+                    }
+                    : project
+            );
+            return newProjects;
+        });
 
-        // 2. カットを更新
-        const newProjects = currentProjects.map(project =>
-            String(project.id) === String(projectId)
-                ? {
-                    ...project,
-                    cuts: (project.cuts || []).map(cut =>
-                        String(cut.id) === String(cutId) ? { ...cut, ...updatedCutData } : cut
-                    )
-                }
-                : project
-        );
+        // localStorageにも保存（少し遅延させてステート更新を待つ）
+        await new Promise(resolve => setTimeout(resolve, 0));
 
-        // 3. stateを即座に更新
-        setProjects(newProjects);
-
-        // 4. localStorageにも保存
+        // localStorageから最新のデータを取得して保存
         try {
-            localStorage.setItem('shooting-master-projects', JSON.stringify(newProjects));
+            const saved = localStorage.getItem('shooting-master-projects');
+            if (saved) {
+                const currentProjects = JSON.parse(saved);
+                const updatedProjects = currentProjects.map(project =>
+                    String(project.id) === String(projectId)
+                        ? {
+                            ...project,
+                            cuts: (project.cuts || []).map(cut =>
+                                String(cut.id) === String(cutId) ? { ...cut, ...updatedCutData } : cut
+                            )
+                        }
+                        : project
+                );
+                localStorage.setItem('shooting-master-projects', JSON.stringify(updatedProjects));
+                newProjects = updatedProjects;
+            }
         } catch (error) {
             console.error('localStorage保存エラー:', error);
         }
 
-        // 5. 操作時刻を記録（自動同期スキップ用）
+        // 操作時刻を記録（自動同期スキップ用）
         setLastOperationTime(Date.now());
 
-        // 6. クラウドにも同期（完了を待機）
+        // クラウドにも同期（完了を待機）
         if (userId !== 'anonymous') {
             const updatedProject = newProjects.find(p => String(p.id) === String(projectId));
             if (updatedProject) {
