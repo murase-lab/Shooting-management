@@ -374,24 +374,26 @@ const CutEdit = () => {
                             </label>
                             <p className="text-xs text-gray-500 -mt-1">このカットで使用するアイテムを選択</p>
                             <div className="grid grid-cols-2 gap-2 mt-1">
-                                {projectProps.map(prop => (
+                                {projectProps.map(prop => {
+                                    const isSelected = selectedPropIds.includes(Number(prop.id));
+                                    return (
                                     <button
                                         key={prop.id}
                                         type="button"
                                         onClick={() => togglePropSelection(prop.id)}
                                         className={`p-3 rounded-xl border-2 text-left transition-all ${
-                                            selectedPropIds.includes(prop.id)
+                                            isSelected
                                                 ? 'border-primary bg-primary/10'
                                                 : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
                                         }`}
                                     >
                                         <div className="flex items-start gap-2">
                                             <div className={`size-5 rounded border-2 flex items-center justify-center shrink-0 mt-0.5 ${
-                                                selectedPropIds.includes(prop.id)
+                                                isSelected
                                                     ? 'bg-primary border-primary text-white'
                                                     : 'border-gray-300'
                                             }`}>
-                                                {selectedPropIds.includes(prop.id) && (
+                                                {isSelected && (
                                                     <span className="material-symbols-outlined text-sm">check</span>
                                                 )}
                                             </div>
@@ -408,7 +410,8 @@ const CutEdit = () => {
                                             </div>
                                         </div>
                                     </button>
-                                ))}
+                                    );
+                                })}
                             </div>
                             {selectedPropIds.length > 0 && (
                                 <p className="text-xs text-primary font-medium">
@@ -427,13 +430,15 @@ const CutEdit = () => {
                             </label>
                             <p className="text-xs text-gray-500 -mt-1">このカットで起用するモデルを選択（不要な場合は選択しない）</p>
                             <div className="grid grid-cols-2 gap-2 mt-1">
-                                {models.map(model => (
+                                {models.map(model => {
+                                    const isSelected = selectedModelIds.includes(Number(model.id));
+                                    return (
                                     <button
                                         key={model.id}
                                         type="button"
                                         onClick={() => toggleModelSelection(model.id)}
                                         className={`p-3 rounded-xl border-2 text-left transition-all ${
-                                            selectedModelIds.includes(model.id)
+                                            isSelected
                                                 ? 'border-pink-500 bg-pink-50 dark:bg-pink-900/20'
                                                 : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
                                         }`}
@@ -452,12 +457,13 @@ const CutEdit = () => {
                                                 <p className="text-sm font-medium truncate">{model.name}</p>
                                                 <p className="text-[10px] text-gray-500">{model.gender} / {model.age}歳</p>
                                             </div>
-                                            {selectedModelIds.includes(model.id) && (
+                                            {isSelected && (
                                                 <span className="material-symbols-outlined text-pink-500">check_circle</span>
                                             )}
                                         </div>
                                     </button>
-                                ))}
+                                    );
+                                })}
                             </div>
                             {selectedModelIds.length > 0 && (
                                 <p className="text-xs text-pink-500 font-medium">
