@@ -148,15 +148,17 @@ export const ProjectProvider = ({ children }) => {
         const localCutMap = new Map(localCuts.map(c => [normalizeId(c.id), c]));
         const localPropMap = new Map(localProps.map(p => [normalizeId(p.id), p]));
 
-        // クラウドのカットをベースにマージ（画像は空でない方を優先）
+        // クラウドのカットをベースにマージ（画像・propIds・modelIdsは空でない方を優先）
         const mergedCloudCuts = cloudCuts.map(cloudCut => {
             const localCut = localCutMap.get(normalizeId(cloudCut.id));
             if (localCut) {
-                // 両方にある場合、画像は空でない方を優先
+                // 両方にある場合、空でない方を優先
                 return {
                     ...cloudCut,
                     originalImage: cloudCut.originalImage || localCut.originalImage || '',
                     aiGeneratedImage: cloudCut.aiGeneratedImage || localCut.aiGeneratedImage || '',
+                    propIds: (cloudCut.propIds?.length > 0) ? cloudCut.propIds : (localCut.propIds || []),
+                    modelIds: (cloudCut.modelIds?.length > 0) ? cloudCut.modelIds : (localCut.modelIds || []),
                 };
             }
             return cloudCut;
@@ -260,7 +262,7 @@ export const ProjectProvider = ({ children }) => {
                     // プロジェクト画像を補完
                     const productImage = cloudProject.productImage || localProject?.productImage || '';
 
-                    // カットの画像を補完
+                    // カットの画像・propIds・modelIdsを補完
                     const localCutMap = new Map((localProject?.cuts || []).map(c => [normalizeId(c.id), c]));
                     const cuts = (cloudProject.cuts || []).map(cloudCut => {
                         const localCut = localCutMap.get(normalizeId(cloudCut.id));
@@ -268,6 +270,8 @@ export const ProjectProvider = ({ children }) => {
                             ...cloudCut,
                             originalImage: cloudCut.originalImage || localCut?.originalImage || '',
                             aiGeneratedImage: cloudCut.aiGeneratedImage || localCut?.aiGeneratedImage || '',
+                            propIds: (cloudCut.propIds?.length > 0) ? cloudCut.propIds : (localCut?.propIds || []),
+                            modelIds: (cloudCut.modelIds?.length > 0) ? cloudCut.modelIds : (localCut?.modelIds || []),
                         };
                     });
 
@@ -354,7 +358,7 @@ export const ProjectProvider = ({ children }) => {
                     // プロジェクト画像を補完
                     const productImage = cloudProject.productImage || localProject?.productImage || '';
 
-                    // カットの画像を補完
+                    // カットの画像・propIds・modelIdsを補完
                     const localCutMap = new Map((localProject?.cuts || []).map(c => [normalizeId(c.id), c]));
                     const cuts = (cloudProject.cuts || []).map(cloudCut => {
                         const localCut = localCutMap.get(normalizeId(cloudCut.id));
@@ -362,6 +366,8 @@ export const ProjectProvider = ({ children }) => {
                             ...cloudCut,
                             originalImage: cloudCut.originalImage || localCut?.originalImage || '',
                             aiGeneratedImage: cloudCut.aiGeneratedImage || localCut?.aiGeneratedImage || '',
+                            propIds: (cloudCut.propIds?.length > 0) ? cloudCut.propIds : (localCut?.propIds || []),
+                            modelIds: (cloudCut.modelIds?.length > 0) ? cloudCut.modelIds : (localCut?.modelIds || []),
                         };
                     });
 
