@@ -165,16 +165,19 @@ const CutEdit = () => {
         return Object.keys(newErrors).length === 0;
     };
 
-    const handleSubmit = () => {
+    const handleSubmit = async () => {
         if (validateForm()) {
-            updateCut(projectId, Number(cutId), {
+            await updateCut(projectId, Number(cutId), {
                 ...formData,
                 originalImage: originalImage,
                 aiGeneratedImage: aiGeneratedImage,
                 propIds: selectedPropIds,
                 modelIds: selectedModelIds,
             });
-            navigate(`/project-detail/${projectId}`);
+            // 状態更新を確実に反映させるため、次のイベントループで遷移
+            setTimeout(() => {
+                navigate(`/project-detail/${projectId}`);
+            }, 0);
         }
     };
 
