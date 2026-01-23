@@ -842,16 +842,8 @@ export const ProjectProvider = ({ children }) => {
             }
         }
 
-        // 1. 現在のlocalStorageから読み込み
-        let currentProjects = [];
-        try {
-            const saved = localStorage.getItem('shooting-master-projects');
-            if (saved) {
-                currentProjects = JSON.parse(saved);
-            }
-        } catch (e) {
-            console.log('localStorage読み込み失敗');
-        }
+        // 1. 現在のステートからプロジェクトを取得（localStorageではなくステートを使用）
+        const currentProjects = [...projects];
 
         // 2. カットを更新
         const newProjects = currentProjects.map(project =>
@@ -865,15 +857,15 @@ export const ProjectProvider = ({ children }) => {
                 : project
         );
 
-        // 3. localStorageに即座に保存
+        // 3. stateを即座に更新
+        setProjects(newProjects);
+
+        // 4. localStorageにも保存
         try {
             localStorage.setItem('shooting-master-projects', JSON.stringify(newProjects));
         } catch (error) {
             console.error('localStorage保存エラー:', error);
         }
-
-        // 4. stateを更新
-        setProjects(newProjects);
 
         // 5. 操作時刻を記録（自動同期スキップ用）
         setLastOperationTime(Date.now());
@@ -893,16 +885,8 @@ export const ProjectProvider = ({ children }) => {
     };
 
     const deleteCut = async (projectId, cutId) => {
-        // 1. 現在のlocalStorageから読み込み
-        let currentProjects = [];
-        try {
-            const saved = localStorage.getItem('shooting-master-projects');
-            if (saved) {
-                currentProjects = JSON.parse(saved);
-            }
-        } catch (e) {
-            console.log('localStorage読み込み失敗');
-        }
+        // 1. 現在のステートからプロジェクトを取得
+        const currentProjects = [...projects];
 
         // 2. カットを削除
         const newProjects = currentProjects.map(project =>
@@ -911,7 +895,10 @@ export const ProjectProvider = ({ children }) => {
                 : project
         );
 
-        // 3. localStorageに即座に保存
+        // 3. stateを即座に更新
+        setProjects(newProjects);
+
+        // 4. localStorageにも保存
         try {
             localStorage.setItem('shooting-master-projects', JSON.stringify(newProjects));
         } catch (error) {
