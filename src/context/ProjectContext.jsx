@@ -843,7 +843,7 @@ export const ProjectProvider = ({ children }) => {
         // 5. 操作時刻を記録（自動同期スキップ用）
         setLastOperationTime(Date.now());
 
-        // 6. クラウドにも同期（完了を待機）
+        // 6. クラウドにも同期（削除を反映）
         const userId = getUserId();
         if (userId !== 'anonymous') {
             const updatedProject = newProjects.find(p => String(p.id) === String(projectId));
@@ -851,23 +851,6 @@ export const ProjectProvider = ({ children }) => {
                 try {
                     await projectsApi.update(userId, String(projectId), updatedProject);
                     console.log('カット削除をクラウドに同期完了');
-
-                    // 7. クラウドから最新のプロジェクトを取得してローカルとマージ（画像保持）
-                    const cloudProject = await projectsApi.getById(userId, String(projectId));
-                    if (cloudProject) {
-                        const localProject = newProjects.find(p => String(p.id) === String(projectId));
-                        const mergedProject = mergeProjectDataSafe(localProject, cloudProject);
-                        const syncedProjects = newProjects.map(p =>
-                            String(p.id) === String(projectId) ? mergedProject : p
-                        );
-                        try {
-                            localStorage.setItem('shooting-master-projects', JSON.stringify(syncedProjects));
-                        } catch (e) {
-                            // 容量超過の場合は無視
-                        }
-                        setProjects(syncedProjects);
-                        setLastOperationTime(Date.now());
-                    }
                 } catch (e) {
                     console.error('クラウド同期エラー:', e);
                 }
@@ -1154,7 +1137,7 @@ export const ProjectProvider = ({ children }) => {
         // 5. 操作時刻を記録（自動同期スキップ用）
         setLastOperationTime(Date.now());
 
-        // 6. クラウドにも同期（完了を待機）
+        // 6. クラウドにも同期（削除を反映）
         const userId = getUserId();
         if (userId !== 'anonymous') {
             const updatedProject = newProjects.find(p => String(p.id) === String(projectId));
@@ -1162,23 +1145,6 @@ export const ProjectProvider = ({ children }) => {
                 try {
                     await projectsApi.update(userId, String(projectId), updatedProject);
                     console.log('小物削除をクラウドに同期完了');
-
-                    // 7. クラウドから最新のプロジェクトを取得してローカルとマージ（画像保持）
-                    const cloudProject = await projectsApi.getById(userId, String(projectId));
-                    if (cloudProject) {
-                        const localProject = newProjects.find(p => String(p.id) === String(projectId));
-                        const mergedProject = mergeProjectDataSafe(localProject, cloudProject);
-                        const syncedProjects = newProjects.map(p =>
-                            String(p.id) === String(projectId) ? mergedProject : p
-                        );
-                        try {
-                            localStorage.setItem('shooting-master-projects', JSON.stringify(syncedProjects));
-                        } catch (e) {
-                            // 容量超過の場合は無視
-                        }
-                        setProjects(syncedProjects);
-                        setLastOperationTime(Date.now());
-                    }
                 } catch (e) {
                     console.error('クラウド同期エラー:', e);
                 }

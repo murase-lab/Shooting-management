@@ -4,7 +4,7 @@ import Layout from '../components/Layout';
 import { useProjects } from '../context/ProjectContext';
 import { useModels } from '../context/ModelContext';
 import { useAuth, PERMISSION_PAGES } from '../context/AuthContext';
-import { syncApi } from '../services/api';
+import { syncApi, projectsApi, modelsApi } from '../services/api';
 import { uploadProjectImagesToR2, uploadModelImageToR2, isBase64Image } from '../services/imageService';
 
 const Settings = () => {
@@ -263,24 +263,65 @@ const Settings = () => {
         setMigrating(false);
     };
 
-    // クラウドと双方向同期
+    // クラウドと同期（ローカルを正として上書き）
     const handleCloudSync = async () => {
         setCloudSyncing(true);
         setCloudSyncMessage('');
+        const userId = 'owner';
+
         try {
-            // 1. まずクラウドからダウンロード（マージ）
-            const projectResult = await fetchProjectsFromCloud();
-            const modelResult = await fetchModelsFromCloud();
-
-            // 2. ローカルデータをクラウドにアップロード
-            const userId = 'owner';
-            await syncApi.syncAll(userId, { projects, models });
-
-            if (projectResult?.success || modelResult?.success) {
-                setCloudSyncMessage('同期が完了しました');
-            } else {
-                setCloudSyncMessage('同期が完了しました');
+            // 現在のローカルデータを取得
+            let localProjects = [];
+            let localModels = [];
+            try {
+                const savedProjects = localStorage.getItem('shooting-master-projects');
+                const savedModels = localStorage.getItem('shooting-master-models');
+                if (savedProjects) localProjects = JSON.parse(savedProjects);
+                if (savedModels) localModels = JSON.parse(savedModels);
+            } catch (e) {
+                console.log('localStorage読み込み失敗');
             }
+
+            // 1. クラウドのデータID一覧を取得（マージはしない）
+            let cloudProjects = [];
+            let cloudModels = [];
+            try {
+                cloudProjects = await projectsApi.getAll(userId);
+                cloudModels = await modelsApi.getAll(userId);
+            } catch (e) {
+                console.log('クラウドからの取得スキップ:', e.message);
+            }
+
+            // 2. ローカルに存在しないクラウドのプロジェクトを削除
+            const localProjectIds = new Set(localProjects.map(p => String(p.id)));
+            for (const cloudProject of cloudProjects) {
+                if (!localProjectIds.has(String(cloudProject.id))) {
+                    try {
+                        await projectsApi.delete(userId, String(cloudProject.id));
+                        console.log('クラウドからプロジェクト削除:', cloudProject.id);
+                    } catch (e) {
+                        console.warn('プロジェクト削除失敗:', cloudProject.id, e);
+                    }
+                }
+            }
+
+            // 3. ローカルに存在しないクラウドのモデルを削除
+            const localModelIds = new Set(localModels.map(m => String(m.id)));
+            for (const cloudModel of cloudModels) {
+                if (!localModelIds.has(String(cloudModel.id))) {
+                    try {
+                        await modelsApi.delete(userId, String(cloudModel.id));
+                        console.log('クラウドからモデル削除:', cloudModel.id);
+                    } catch (e) {
+                        console.warn('モデル削除失敗:', cloudModel.id, e);
+                    }
+                }
+            }
+
+            // 4. ローカルデータをクラウドにアップロード（上書き）
+            await syncApi.syncAll(userId, { projects: localProjects, models: localModels });
+
+            setCloudSyncMessage('同期が完了しました（このデバイスのデータを反映）');
         } catch (error) {
             console.error('Cloud sync error:', error);
             setCloudSyncMessage('同期に失敗しました: ' + error.message);
