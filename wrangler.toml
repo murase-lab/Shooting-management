@@ -1,0 +1,14 @@
+name = "shooting-master"
+compatibility_date = "2026-01-22"
+pages_build_output_dir = "dist"
+
+# D1 Database
+[[d1_databases]]
+binding = "DB"
+database_name = "shooting-master-db"
+database_id = "bedef283-1474-4924-8394-21fc561c8520"
+
+# R2 Bucket for images
+[[r2_buckets]]
+binding = "IMAGES"
+bucket_name = "shooting-master-images"

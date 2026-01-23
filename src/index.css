@@ -1,0 +1,103 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #2e616b;
+  --color-background-light: #fafafa;
+  --color-background-dark: #121416;
+  --color-accent-sand: #CAC0B5;
+  --color-surface-dark: #1e2226;
+}
+
+body {
+  font-family: 'Manrope', 'Noto Sans JP', sans-serif;
+  background-color: #fafafa;
+  min-height: max(884px, 100dvh);
+}
+
+.dark body {
+  background-color: #121416;
+}
+
+.material-symbols-outlined {
+  font-family: 'Material Symbols Outlined';
+  font-weight: normal;
+  font-style: normal;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-smoothing: antialiased;
+}
+
+.fill-1 {
+  font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+
+.font-display {
+  font-family: 'Epilogue', 'Space Grotesk', 'Noto Sans JP', sans-serif;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.red-pen-overlay {
+  border: 2px dashed #dc1849;
+  position: relative;
+}
+
+.red-pen-overlay::after {
+  content: "FIX LIGHTING";
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: #dc1849;
+  color: white;
+  font-size: 10px;
+  padding: 2px 6px;
+  font-weight: bold;
+}
+
+/* Progress bar animation */
+@keyframes progress-pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.progress-animate {
+  animation: progress-pulse 2s ease-in-out infinite;
+}
+
+/* Smooth transitions */
+.transition-smooth {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Fade in animation */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.3s ease-out;
+}
