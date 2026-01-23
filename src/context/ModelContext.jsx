@@ -130,7 +130,7 @@ export const ModelProvider = ({ children }) => {
         }
     }, [models]);
 
-    // クラウドからデータを取得（ローカルデータとマージ）
+    // クラウドからデータを取得（クラウドで上書き、画像のみローカルを補完）
     const fetchFromCloud = useCallback(async () => {
         const userId = getUserId();
 
@@ -138,7 +138,7 @@ export const ModelProvider = ({ children }) => {
             setSyncStatus('syncing');
             console.log('【fetchFromCloud】クラウドからデータ取得中...');
 
-            // 1. まずlocalStorageから現在のデータを取得
+            // 1. まずlocalStorageから現在のデータを取得（画像補完用）
             let localModels = [];
             try {
                 const saved = localStorage.getItem('shooting-master-models');
@@ -155,27 +155,29 @@ export const ModelProvider = ({ children }) => {
             console.log('【fetchFromCloud】クラウドデータ:', cloudModels?.length || 0, '件');
 
             if (cloudModels && cloudModels.length > 0) {
-                // 3. ローカルのIDセット（ローカルが優先）
-                const localIds = new Set(localModels.map(m => String(m.id)));
+                // 3. クラウドのデータで上書き（画像のみローカルから補完）
+                const localModelMap = new Map(localModels.map(m => [String(m.id), m]));
 
-                // 4. クラウドにしかないデータ（他のデバイスで追加されたもの）を取得
-                const cloudOnlyModels = cloudModels.filter(m => !localIds.has(String(m.id)));
-                console.log('【fetchFromCloud】クラウドのみ:', cloudOnlyModels.length, '件');
+                const finalModels = cloudModels.map(cloudModel => {
+                    const localModel = localModelMap.get(String(cloudModel.id));
+                    return {
+                        ...cloudModel,
+                        image: cloudModel.image || localModel?.image || '',
+                    };
+                });
 
-                // 5. ローカルのデータ + クラウドにしかないデータをマージ
-                const mergedModels = [...localModels, ...cloudOnlyModels];
-                console.log('【fetchFromCloud】マージ結果:', mergedModels.length, '件');
+                console.log('【fetchFromCloud】クラウドから取得完了:', finalModels.length, '件');
 
-                // 6. stateを更新
-                setModels(mergedModels);
+                // 4. stateを更新
+                setModels(finalModels);
                 setLastSyncTime(new Date().toISOString());
 
-                // 7. localStorageにもキャッシュとして保存（エラーは無視）
+                // 5. localStorageにも保存
                 try {
-                    localStorage.setItem('shooting-master-models', JSON.stringify(mergedModels));
-                    console.log('【fetchFromCloud】localStorageにマージ結果を保存');
+                    localStorage.setItem('shooting-master-models', JSON.stringify(finalModels));
+                    console.log('【fetchFromCloud】localStorageに保存完了');
                 } catch (e) {
-                    console.log('【fetchFromCloud】localStorageへの保存失敗（シークレットモード等）');
+                    console.log('【fetchFromCloud】localStorageへの保存失敗');
                 }
             } else {
                 console.log('【fetchFromCloud】クラウドにデータなし、ローカルデータを維持');
@@ -190,7 +192,7 @@ export const ModelProvider = ({ children }) => {
         }
     }, [getUserId]);
 
-    // クラウドから同期する関数（ローカル優先のマージ）
+    // クラウドから同期する関数（クラウドで上書き、画像のみローカルを補完）
     const syncFromCloud = useCallback(async () => {
         // 既に同期中の場合はスキップ
         if (isSyncingRef.current) {
@@ -209,7 +211,7 @@ export const ModelProvider = ({ children }) => {
                 console.log('進行中の操作が完了しました');
             }
 
-            // localStorageから直接読み込み（これが真のソース）
+            // localStorageから直接読み込み（画像補完用）
             const localModels = JSON.parse(localStorage.getItem('shooting-master-models') || '[]');
             console.log('localStorage から取得:', localModels.length, '件');
 
@@ -217,33 +219,29 @@ export const ModelProvider = ({ children }) => {
             const cloudModels = await modelsApi.getAll('owner');
             console.log('クラウドから取得:', cloudModels?.length || 0, '件');
 
-            // ローカルのIDセット（ローカルが優先）
-            const localIds = new Set(localModels.map(m => String(m.id)));
+            if (cloudModels && cloudModels.length > 0) {
+                // クラウドのデータで上書き（画像のみローカルから補完）
+                const localModelMap = new Map(localModels.map(m => [String(m.id), m]));
 
-            // クラウドにしかないデータ（他のデバイスで追加されたもの）
-            const cloudOnlyModels = (cloudModels || []).filter(m => !localIds.has(String(m.id)));
+                const finalModels = cloudModels.map(cloudModel => {
+                    const localModel = localModelMap.get(String(cloudModel.id));
+                    return {
+                        ...cloudModel,
+                        image: cloudModel.image || localModel?.image || '',
+                    };
+                });
 
-            if (cloudOnlyModels.length > 0) {
-                console.log('クラウドのみのデータを追加:', cloudOnlyModels.length, '件');
-            }
+                console.log('同期完了: クラウドから', finalModels.length, '件で上書き');
 
-            // ローカルのデータ + クラウドにしかないデータ（ローカル優先でマージ）
-            const merged = [...localModels, ...cloudOnlyModels];
-            console.log('マージ結果:', merged.length, '件 (ローカル', localModels.length, '+ クラウドのみ', cloudOnlyModels.length, ')');
+                // stateを更新
+                setModels(finalModels);
 
-            // stateを更新（これによりlocalStorageにも保存される）
-            setModels(merged);
-
-            // ローカルのデータをクラウドにも同期（バックグラウンドで）
-            // サンプルデータ(ID 1-4)以外を同期
-            const userAddedModels = localModels.filter(m => Number(m.id) > 4);
-            if (userAddedModels.length > 0) {
-                console.log('ローカルデータをクラウドに同期中:', userAddedModels.length, '件');
-                // 待たずにバックグラウンドで実行
-                Promise.all(userAddedModels.map(model =>
-                    modelsApi.create('owner', { ...model, id: String(model.id) })
-                        .catch(() => {}) // エラーは無視
-                ));
+                // localStorageにも保存
+                try {
+                    localStorage.setItem('shooting-master-models', JSON.stringify(finalModels));
+                } catch (e) {
+                    console.log('localStorage保存失敗');
+                }
             }
         } catch (error) {
             console.log('自動同期スキップ（オフラインまたはAPIエラー）:', error.message);

@@ -223,7 +223,7 @@ export const ProjectProvider = ({ children }) => {
         }
     }, [projects]);
 
-    // クラウドからデータを取得（クラウド優先でマージ、カット・小物も含む）
+    // クラウドからデータを取得（クラウドで上書き、画像のみローカルを補完）
     const fetchFromCloud = useCallback(async () => {
         const userId = getUserId();
 
@@ -238,7 +238,7 @@ export const ProjectProvider = ({ children }) => {
             setSyncStatus('syncing');
             const cloudProjects = await projectsApi.getAll(userId);
 
-            // 1. まずローカルのデータを取得
+            // 1. まずローカルのデータを取得（画像補完用）
             let localProjects = [];
             try {
                 const saved = localStorage.getItem('shooting-master-projects');
@@ -249,46 +249,47 @@ export const ProjectProvider = ({ children }) => {
                 console.log('localStorage読み込み失敗');
             }
 
-            // 2. クラウドのデータとマージ（クラウド優先、重複排除）
+            // 2. クラウドのデータで上書き（画像のみローカルから補完）
             if (cloudProjects && cloudProjects.length > 0) {
-                // クラウドのプロジェクトをベースにマージ
                 const localProjectMap = new Map(localProjects.map(p => [normalizeId(p.id), p]));
 
-                const mergedProjects = cloudProjects.map(cloudProject => {
+                // クラウドのデータをベースに、画像のみローカルから補完
+                const finalProjects = cloudProjects.map(cloudProject => {
                     const localProject = localProjectMap.get(normalizeId(cloudProject.id));
-                    if (localProject) {
-                        // 両方に存在する場合、mergeProjectDataSafeでマージ（クラウド優先）
-                        return mergeProjectDataSafe(localProject, cloudProject);
-                    }
-                    // クラウドにしかない場合はそのまま
+
+                    // プロジェクト画像を補完
+                    const productImage = cloudProject.productImage || localProject?.productImage || '';
+
+                    // カットの画像を補完
+                    const localCutMap = new Map((localProject?.cuts || []).map(c => [normalizeId(c.id), c]));
+                    const cuts = (cloudProject.cuts || []).map(cloudCut => {
+                        const localCut = localCutMap.get(normalizeId(cloudCut.id));
+                        return {
+                            ...cloudCut,
+                            originalImage: cloudCut.originalImage || localCut?.originalImage || '',
+                            aiGeneratedImage: cloudCut.aiGeneratedImage || localCut?.aiGeneratedImage || '',
+                        };
+                    });
+
+                    // 小物の画像を補完
+                    const localPropMap = new Map((localProject?.props || []).map(p => [normalizeId(p.id), p]));
+                    const props = (cloudProject.props || []).map(cloudProp => {
+                        const localProp = localPropMap.get(normalizeId(cloudProp.id));
+                        return {
+                            ...cloudProp,
+                            image: cloudProp.image || localProp?.image || '',
+                        };
+                    });
+
                     return {
                         ...cloudProject,
-                        cuts: deduplicateById(cloudProject.cuts || []),
-                        props: deduplicateById(cloudProject.props || []),
+                        productImage,
+                        cuts,
+                        props,
                     };
                 });
 
-                // クラウドに存在しないローカルのプロジェクトを追加（まだ同期されていない新規追加）
-                const cloudProjectIds = new Set(cloudProjects.map(p => normalizeId(p.id)));
-                localProjects.forEach(localProject => {
-                    if (!cloudProjectIds.has(normalizeId(localProject.id))) {
-                        // ローカルにしかないプロジェクトを追加
-                        mergedProjects.push({
-                            ...localProject,
-                            cuts: deduplicateById(localProject.cuts || []),
-                            props: deduplicateById(localProject.props || []),
-                        });
-                    }
-                });
-
-                // 3. 最終的なデータに重複排除を適用
-                const finalProjects = mergedProjects.map(project => ({
-                    ...project,
-                    cuts: deduplicateById(project.cuts || []),
-                    props: deduplicateById(project.props || []),
-                }));
-
-                // 4. localStorageとstateを更新
+                // localStorageとstateを更新
                 try {
                     localStorage.setItem('shooting-master-projects', JSON.stringify(finalProjects));
                 } catch (e) {
@@ -297,6 +298,7 @@ export const ProjectProvider = ({ children }) => {
 
                 setProjects(finalProjects);
                 setLastSyncTime(new Date().toISOString());
+                console.log(`クラウドから取得完了: ${finalProjects.length}件のプロジェクト`);
             }
 
             setSyncStatus('synced');
@@ -310,7 +312,7 @@ export const ProjectProvider = ({ children }) => {
         }
     }, [getUserId, isSyncing]);
 
-    // クラウドから同期する関数（クラウド優先でマージ、カット・小物も含む）
+    // クラウドから同期する関数（クラウドで上書き、画像のみローカルを補完）
     const syncFromCloud = useCallback(async (forceSync = false) => {
         // 同期中ロック
         if (isSyncing) {
@@ -330,7 +332,7 @@ export const ProjectProvider = ({ children }) => {
         try {
             const cloudProjects = await projectsApi.getAll('owner');
 
-            // 1. まずローカルのデータを取得
+            // 1. まずローカルのデータを取得（画像補完用）
             let localProjects = [];
             try {
                 const saved = localStorage.getItem('shooting-master-projects');
@@ -341,46 +343,47 @@ export const ProjectProvider = ({ children }) => {
                 console.log('localStorage読み込み失敗');
             }
 
-            // 2. クラウドのデータとマージ（クラウド優先、重複排除）
+            // 2. クラウドのデータで上書き（画像のみローカルから補完）
             if (cloudProjects && cloudProjects.length > 0) {
-                // クラウドのプロジェクトをベースにマージ
                 const localProjectMap = new Map(localProjects.map(p => [normalizeId(p.id), p]));
 
-                const mergedProjects = cloudProjects.map(cloudProject => {
+                // クラウドのデータをベースに、画像のみローカルから補完
+                const finalProjects = cloudProjects.map(cloudProject => {
                     const localProject = localProjectMap.get(normalizeId(cloudProject.id));
-                    if (localProject) {
-                        // 両方に存在する場合、mergeProjectDataSafeでマージ（クラウド優先）
-                        return mergeProjectDataSafe(localProject, cloudProject);
-                    }
-                    // クラウドにしかない場合はそのまま
+
+                    // プロジェクト画像を補完
+                    const productImage = cloudProject.productImage || localProject?.productImage || '';
+
+                    // カットの画像を補完
+                    const localCutMap = new Map((localProject?.cuts || []).map(c => [normalizeId(c.id), c]));
+                    const cuts = (cloudProject.cuts || []).map(cloudCut => {
+                        const localCut = localCutMap.get(normalizeId(cloudCut.id));
+                        return {
+                            ...cloudCut,
+                            originalImage: cloudCut.originalImage || localCut?.originalImage || '',
+                            aiGeneratedImage: cloudCut.aiGeneratedImage || localCut?.aiGeneratedImage || '',
+                        };
+                    });
+
+                    // 小物の画像を補完
+                    const localPropMap = new Map((localProject?.props || []).map(p => [normalizeId(p.id), p]));
+                    const props = (cloudProject.props || []).map(cloudProp => {
+                        const localProp = localPropMap.get(normalizeId(cloudProp.id));
+                        return {
+                            ...cloudProp,
+                            image: cloudProp.image || localProp?.image || '',
+                        };
+                    });
+
                     return {
                         ...cloudProject,
-                        cuts: deduplicateById(cloudProject.cuts || []),
-                        props: deduplicateById(cloudProject.props || []),
+                        productImage,
+                        cuts,
+                        props,
                     };
                 });
 
-                // クラウドに存在しないローカルのプロジェクトを追加（まだ同期されていない新規追加）
-                const cloudProjectIds = new Set(cloudProjects.map(p => normalizeId(p.id)));
-                localProjects.forEach(localProject => {
-                    if (!cloudProjectIds.has(normalizeId(localProject.id))) {
-                        // ローカルにしかないプロジェクトを追加
-                        mergedProjects.push({
-                            ...localProject,
-                            cuts: deduplicateById(localProject.cuts || []),
-                            props: deduplicateById(localProject.props || []),
-                        });
-                    }
-                });
-
-                // 3. 最終的なデータに重複排除を適用
-                const finalProjects = mergedProjects.map(project => ({
-                    ...project,
-                    cuts: deduplicateById(project.cuts || []),
-                    props: deduplicateById(project.props || []),
-                }));
-
-                // 4. localStorageとstateを更新
+                // localStorageとstateを更新
                 try {
                     localStorage.setItem('shooting-master-projects', JSON.stringify(finalProjects));
                 } catch (e) {
@@ -388,7 +391,7 @@ export const ProjectProvider = ({ children }) => {
                 }
 
                 setProjects(finalProjects);
-                console.log(`同期完了: クラウド${cloudProjects.length}件をベースに、ローカル${localProjects.length}件とマージ（重複排除済み）`);
+                console.log(`同期完了: クラウドから${finalProjects.length}件のプロジェクトで上書き`);
             }
             setIsSyncing(false);
         } catch (error) {
