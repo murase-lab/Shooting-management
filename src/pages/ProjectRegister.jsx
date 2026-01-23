@@ -1,5 +1,5 @@
-import { useState, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useRef, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import Header from '../components/Header';
 import { useProjects } from '../context/ProjectContext';
 import { readAndResizeImage } from '../utils/imageUtils';
@@ -7,8 +7,12 @@ import { ensureImageSize } from '../utils/imageCompressor';
 
 const ProjectRegister = () => {
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+    const editId = searchParams.get('edit');
+    const isEditMode = !!editId;
+
     const fileInputRef = useRef(null);
-    const { addProject } = useProjects();
+    const { addProject, updateProject, getProjectById } = useProjects();
 
     const [formData, setFormData] = useState({
         name: '',
@@ -20,6 +24,29 @@ const ProjectRegister = () => {
     const [productImage, setProductImage] = useState(null);
     const [imagePreview, setImagePreview] = useState(null);
     const [errors, setErrors] = useState({});
+    const [existingProject, setExistingProject] = useState(null);
+
+    // 編集モードの場合、既存データを読み込み
+    useEffect(() => {
+        if (isEditMode && editId) {
+            const project = getProjectById(editId);
+            if (project) {
+                setExistingProject(project);
+                setFormData({
+                    name: project.name || '',
+                    description: project.description || '',
+                    shootingDate: project.shootingDate || '',
+                    category: project.category || 'cosmetics',
+                });
+                if (project.productImage) {
+                    setImagePreview(project.productImage);
+                }
+            } else {
+                // プロジェクトが見つからない場合は新規作成モードに
+                navigate('/project-register', { replace: true });
+            }
+        }
+    }, [isEditMode, editId, getProjectById, navigate]);
 
     const handleInputChange = (e) => {
         const { name, value } = e.target;
@@ -68,16 +95,27 @@ const ProjectRegister = () => {
         return Object.keys(newErrors).length === 0;
     };
 
-    const handleSubmit = () => {
+    const handleSubmit = async () => {
         if (validateForm()) {
-            const newProject = addProject({
-                ...formData,
-                productImage: imagePreview,
-            });
-            // 状態更新を確実に反映させるため、次のイベントループで遷移
-            setTimeout(() => {
-                navigate(`/project-detail/${newProject.id}`);
-            }, 0);
+            if (isEditMode && existingProject) {
+                // 編集モード
+                await updateProject(existingProject.id, {
+                    ...formData,
+                    productImage: imagePreview || existingProject.productImage,
+                });
+                setTimeout(() => {
+                    navigate(`/project-detail/${existingProject.id}`);
+                }, 0);
+            } else {
+                // 新規作成モード
+                const newProject = await addProject({
+                    ...formData,
+                    productImage: imagePreview,
+                });
+                setTimeout(() => {
+                    navigate(`/project-detail/${newProject.id}`);
+                }, 0);
+            }
         }
     };
 
@@ -90,7 +128,7 @@ const ProjectRegister = () => {
 
     return (
         <div className="max-w-md mx-auto min-h-screen pb-32">
-            <Header title="新規プロジェクト作成" />
+            <Header title={isEditMode ? 'プロジェクト編集' : '新規プロジェクト作成'} />
             <main className="p-6 space-y-6">
                 {/* Product Image */}
                 <section>
@@ -199,17 +237,19 @@ const ProjectRegister = () => {
                 </section>
 
                 {/* Tips */}
-                <section className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4">
-                    <div className="flex items-start gap-3">
-                        <span className="material-symbols-outlined text-blue-500">lightbulb</span>
-                        <div>
-                            <p className="text-sm font-medium text-blue-700 dark:text-blue-300">ヒント</p>
-                            <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
-                                プロジェクト作成後、カット指示を追加してAIで完成イメージを生成できます。
-                            </p>
+                {!isEditMode && (
+                    <section className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4">
+                        <div className="flex items-start gap-3">
+                            <span className="material-symbols-outlined text-blue-500">lightbulb</span>
+                            <div>
+                                <p className="text-sm font-medium text-blue-700 dark:text-blue-300">ヒント</p>
+                                <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                                    プロジェクト作成後、カット指示を追加してAIで完成イメージを生成できます。
+                                </p>
+                            </div>
                         </div>
-                    </div>
-                </section>
+                    </section>
+                )}
             </main>
 
             <footer className="fixed bottom-0 left-0 right-0 p-4 bg-white/90 dark:bg-background-dark/90 backdrop-blur-lg border-t border-gray-100 dark:border-gray-800 z-50">
@@ -217,8 +257,8 @@ const ProjectRegister = () => {
                     onClick={handleSubmit}
                     className="w-full max-w-md mx-auto flex items-center justify-center gap-2 bg-primary text-white font-bold py-4 rounded-xl shadow-lg hover:bg-primary/90 transition-colors"
                 >
-                    <span className="material-symbols-outlined">add</span>
-                    プロジェクトを作成
+                    <span className="material-symbols-outlined">{isEditMode ? 'save' : 'add'}</span>
+                    {isEditMode ? 'プロジェクトを更新' : 'プロジェクトを作成'}
                 </button>
             </footer>
         </div>

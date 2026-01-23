@@ -601,6 +601,78 @@ export const ProjectProvider = ({ children }) => {
         }
     };
 
+    // プロジェクトをコピー
+    const copyProject = async (id) => {
+        const userId = getUserId();
+
+        // 1. 現在のlocalStorageから読み込み
+        let currentProjects = [];
+        try {
+            const saved = localStorage.getItem('shooting-master-projects');
+            if (saved) {
+                currentProjects = JSON.parse(saved);
+            }
+        } catch (e) {
+            console.log('localStorage読み込み失敗');
+        }
+
+        // 2. コピー元のプロジェクトを取得
+        const sourceProject = currentProjects.find(p => String(p.id) === String(id));
+        if (!sourceProject) {
+            console.error('コピー元のプロジェクトが見つかりません');
+            return null;
+        }
+
+        // 3. 新しいプロジェクトを作成（IDを新規生成）
+        const newProjectId = Date.now();
+        const newProject = {
+            ...sourceProject,
+            id: newProjectId,
+            name: `${sourceProject.name} (コピー)`,
+            status: 'draft',
+            createdAt: new Date().toISOString().split('T')[0],
+            // カットも新しいIDで複製
+            cuts: (sourceProject.cuts || []).map((cut, index) => ({
+                ...cut,
+                id: newProjectId + index + 1,
+                status: 'pending',
+            })),
+            // 小物も新しいIDで複製
+            props: (sourceProject.props || []).map((prop, index) => ({
+                ...prop,
+                id: newProjectId + 1000 + index + 1,
+                checked: false,
+                delivery: null,
+            })),
+        };
+
+        // 4. 新しいプロジェクトを追加
+        const newProjects = [newProject, ...currentProjects];
+
+        // 5. localStorageに即座に保存
+        try {
+            localStorage.setItem('shooting-master-projects', JSON.stringify(newProjects));
+            console.log('【copyProject】プロジェクトコピー完了:', newProject.name);
+        } catch (error) {
+            console.error('localStorage保存エラー:', error);
+        }
+
+        // 6. stateを更新
+        setProjects(newProjects);
+
+        // 7. クラウドにも保存を試みる
+        if (userId !== 'anonymous') {
+            try {
+                await projectsApi.create(userId, { ...newProject, id: String(newProject.id) });
+                console.log('コピーしたプロジェクトをクラウドに保存しました');
+            } catch (error) {
+                console.error('クラウドへの保存に失敗:', error);
+            }
+        }
+
+        return newProject;
+    };
+
     const getProjectById = (id) => {
         // IDが文字列でも数値でも比較できるように両方を試す
         return projects.find(project => String(project.id) === String(id));
@@ -1434,6 +1506,7 @@ export const ProjectProvider = ({ children }) => {
             addProject,
             updateProject,
             deleteProject,
+            copyProject,
             getProjectById,
             addCut,
             updateCut,
