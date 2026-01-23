@@ -649,7 +649,7 @@ const Settings = () => {
 
             {/* API設定モーダル */}
             {showApiModal && (
-                <div className="fixed inset-0 bg-black/50 z-50 flex items-end justify-center">
+                <div className="fixed inset-0 bg-black/50 z-[60] flex items-end justify-center">
                     <div className="bg-white dark:bg-gray-800 w-full max-w-md rounded-t-3xl p-6 animate-slideUp">
                         <div className="flex items-center justify-between mb-6">
                             <h3 className="text-lg font-bold">Gemini API設定</h3>
@@ -728,7 +728,7 @@ const Settings = () => {
 
             {/* ユーザー設定モーダル */}
             {showUserModal && (
-                <div className="fixed inset-0 bg-black/50 z-50 flex items-end justify-center">
+                <div className="fixed inset-0 bg-black/50 z-[60] flex items-end justify-center">
                     <div className="bg-white dark:bg-gray-800 w-full max-w-md rounded-t-3xl p-6 animate-slideUp">
                         <div className="flex items-center justify-between mb-6">
                             <h3 className="text-lg font-bold">プロフィール設定</h3>
@@ -809,7 +809,7 @@ const Settings = () => {
 
             {/* データ管理モーダル */}
             {showDataModal && (
-                <div className="fixed inset-0 bg-black/50 z-50 flex items-end justify-center">
+                <div className="fixed inset-0 bg-black/50 z-[60] flex items-end justify-center">
                     <div className="bg-white dark:bg-gray-800 w-full max-w-md rounded-t-3xl p-6 animate-slideUp">
                         <div className="flex items-center justify-between mb-6">
                             <h3 className="text-lg font-bold">データ管理</h3>
@@ -898,7 +898,7 @@ const Settings = () => {
 
             {/* メンバー招待モーダル */}
             {showInviteModal && (
-                <div className="fixed inset-0 bg-black/50 z-50 flex items-end justify-center">
+                <div className="fixed inset-0 bg-black/50 z-[60] flex items-end justify-center">
                     <div className="bg-white dark:bg-gray-800 w-full max-w-md rounded-t-3xl p-6 animate-slideUp max-h-[90vh] overflow-y-auto">
                         <div className="flex items-center justify-between mb-6">
                             <h3 className="text-lg font-bold">
@@ -1074,7 +1074,7 @@ const Settings = () => {
 
             {/* 権限管理モーダル */}
             {showPermissionModal && (
-                <div className="fixed inset-0 bg-black/50 z-50 flex items-end justify-center">
+                <div className="fixed inset-0 bg-black/50 z-[60] flex items-end justify-center">
                     <div className="bg-white dark:bg-gray-800 w-full max-w-md rounded-t-3xl p-6 animate-slideUp max-h-[80vh] overflow-y-auto">
                         <div className="flex items-center justify-between mb-6">
                             <h3 className="text-lg font-bold">メンバー権限</h3>
@@ -1243,7 +1243,7 @@ const Settings = () => {
 
             {/* メンバー権限編集モーダル */}
             {showMemberEditModal && selectedMember && (
-                <div className="fixed inset-0 bg-black/50 z-50 flex items-end justify-center">
+                <div className="fixed inset-0 bg-black/50 z-[60] flex items-end justify-center">
                     <div className="bg-white dark:bg-gray-800 w-full max-w-md rounded-t-3xl p-6 animate-slideUp max-h-[85vh] overflow-y-auto">
                         <div className="flex items-center justify-between mb-6">
                             <div>
@@ -1348,7 +1348,7 @@ const Settings = () => {
 
             {/* アプリについてモーダル */}
             {showAboutModal && (
-                <div className="fixed inset-0 bg-black/50 z-50 flex items-end justify-center">
+                <div className="fixed inset-0 bg-black/50 z-[60] flex items-end justify-center">
                     <div className="bg-white dark:bg-gray-800 w-full max-w-md rounded-t-3xl p-6 animate-slideUp">
                         <div className="flex items-center justify-between mb-6">
                             <h3 className="text-lg font-bold">アプリについて</h3>
