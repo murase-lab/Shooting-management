@@ -105,7 +105,7 @@ const ModelList = () => {
                                     {model.modelType === 'agency' ? model.agencyName : 'フリーランス'}
                                 </p>
                                 <div className="flex items-center gap-2 mt-1">
-                                    <span className="text-[10px] text-gray-400">{model.age}歳</span>
+                                    <span className="text-[10px] text-gray-400">{model.height ? `${model.height}cm` : '-'}</span>
                                     {model.instagramUrl && (
                                         <span className="material-symbols-outlined text-pink-400 text-sm">photo_camera</span>
                                     )}
