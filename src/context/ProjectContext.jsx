@@ -1285,27 +1285,34 @@ export const ProjectProvider = ({ children }) => {
         return Math.round((checked / project.props.length) * 100);
     };
 
-    // 小物が使用されているカットを取得
+    // 小物が使用されているカットを取得（型を揃えて比較）
     const getCutsUsingProp = (projectId, propId) => {
         const project = getProjectById(projectId);
         if (!project) return [];
-        return project.cuts.filter(cut => (cut.propIds || []).includes(propId));
+        const normalizedPropId = String(propId);
+        return project.cuts.filter(cut =>
+            (cut.propIds || []).map(id => String(id)).includes(normalizedPropId)
+        );
     };
 
-    // カットで使用する小物を取得
+    // カットで使用する小物を取得（型を揃えて比較）
     const getPropsForCut = (projectId, cutId) => {
         const project = getProjectById(projectId);
         if (!project) return [];
-        const cut = project.cuts.find(c => c.id === Number(cutId));
+        const cut = project.cuts.find(c => String(c.id) === String(cutId));
         if (!cut) return [];
-        return (project.props || []).filter(prop => (cut.propIds || []).includes(prop.id));
+        const normalizedPropIds = (cut.propIds || []).map(id => String(id));
+        return (project.props || []).filter(prop => normalizedPropIds.includes(String(prop.id)));
     };
 
-    // モデルが使用されているカットを取得
+    // モデルが使用されているカットを取得（型を揃えて比較）
     const getCutsUsingModel = (projectId, modelId) => {
         const project = getProjectById(projectId);
         if (!project) return [];
-        return project.cuts.filter(cut => (cut.modelIds || []).includes(modelId));
+        const normalizedModelId = String(modelId);
+        return project.cuts.filter(cut =>
+            (cut.modelIds || []).map(id => String(id)).includes(normalizedModelId)
+        );
     };
 
     // プロジェクトで使用されているモデルIDを取得

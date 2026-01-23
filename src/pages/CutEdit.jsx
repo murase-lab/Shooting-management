@@ -47,8 +47,8 @@ const CutEdit = () => {
             });
             setOriginalImage(cut.originalImage || null);
             setAiGeneratedImage(cut.aiGeneratedImage || null);
-            setSelectedPropIds(cut.propIds || []);
-            setSelectedModelIds(cut.modelIds || []);
+            setSelectedPropIds((cut.propIds || []).map(id => Number(id)));
+            setSelectedModelIds((cut.modelIds || []).map(id => Number(id)));
             setIsInitialized(true);
         }
     }, [cut, isInitialized]);
@@ -141,18 +141,20 @@ const CutEdit = () => {
     };
 
     const togglePropSelection = (propId) => {
+        const numericId = Number(propId);
         setSelectedPropIds(prev =>
-            prev.includes(propId)
-                ? prev.filter(id => id !== propId)
-                : [...prev, propId]
+            prev.includes(numericId)
+                ? prev.filter(id => id !== numericId)
+                : [...prev, numericId]
         );
     };
 
     const toggleModelSelection = (modelId) => {
+        const numericId = Number(modelId);
         setSelectedModelIds(prev =>
-            prev.includes(modelId)
-                ? prev.filter(id => id !== modelId)
-                : [...prev, modelId]
+            prev.includes(numericId)
+                ? prev.filter(id => id !== numericId)
+                : [...prev, numericId]
         );
     };
 
