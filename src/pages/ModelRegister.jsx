@@ -65,7 +65,7 @@ const ModelRegister = () => {
         if (!formData.name.trim()) {
             newErrors.name = '名前を入力してください';
         }
-        if (!formData.age || formData.age < 1 || formData.age > 120) {
+        if (formData.age && (formData.age < 1 || formData.age > 120)) {
             newErrors.age = '有効な年齢を入力してください';
         }
         if (formData.modelType === 'agency' && !formData.agencyName.trim()) {
@@ -94,7 +94,7 @@ const ModelRegister = () => {
 
                 const newModel = await addModel({
                     ...formData,
-                    age: Number(formData.age),
+                    age: formData.age ? Number(formData.age) : null,
                     height: formData.height ? Number(formData.height) : null,
                     image: compressedImage,
                 });
@@ -187,7 +187,7 @@ const ModelRegister = () => {
                             </select>
                         </div>
                         <div className="flex flex-col gap-1.5">
-                            <label className="text-sm font-medium">年齢 <span className="text-red-500">*</span></label>
+                            <label className="text-sm font-medium">年齢</label>
                             <input
                                 name="age"
                                 value={formData.age}

@@ -78,7 +78,7 @@ const ModelDetail = () => {
         if (!editData.name.trim()) {
             newErrors.name = '名前を入力してください';
         }
-        if (!editData.age || editData.age < 1 || editData.age > 120) {
+        if (editData.age && (editData.age < 1 || editData.age > 120)) {
             newErrors.age = '有効な年齢を入力してください';
         }
         if (editData.modelType === 'agency' && !editData.agencyName.trim()) {
@@ -93,7 +93,7 @@ const ModelDetail = () => {
             setIsSaving(true);
             const updatedData = {
                 ...editData,
-                age: Number(editData.age),
+                age: editData.age ? Number(editData.age) : null,
                 height: editData.height ? Number(editData.height) : null,
                 image: editImagePreview,
             };
@@ -148,7 +148,7 @@ const ModelDetail = () => {
                     </p>
                     <div className="flex items-center gap-4 mt-3">
                         <span className="text-sm text-gray-400">{model.gender}</span>
-                        <span className="text-sm text-gray-400">{model.age}歳</span>
+                        {model.age && <span className="text-sm text-gray-400">{model.age}歳</span>}
                     </div>
                 </div>
 
@@ -351,7 +351,7 @@ const ModelDetail = () => {
                                                 </select>
                                             </div>
                                             <div className="flex flex-col gap-1">
-                                                <label className="text-sm font-medium">年齢 <span className="text-red-500">*</span></label>
+                                                <label className="text-sm font-medium">年齢</label>
                                                 <input
                                                     name="age"
                                                     value={editData.age}
