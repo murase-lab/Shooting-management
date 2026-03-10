@@ -109,6 +109,7 @@ export const ProjectProvider = ({ children }) => {
     const [lastSyncTime, setLastSyncTime] = useState(null);
     const [isSyncing, setIsSyncing] = useState(false); // 同期中ロック
     const [lastOperationTime, setLastOperationTime] = useState(0); // 最後の操作時刻（追加/削除/更新）
+    const [operationInProgress, setOperationInProgress] = useState(false); // 操作中ロック（CRUDの途中でsyncが割り込まないようにする）
 
     // ユーザーIDを取得（全デバイスで共通の「owner」を使用）
     const getUserId = useCallback(() => {
@@ -225,7 +226,7 @@ export const ProjectProvider = ({ children }) => {
         }
     }, [projects]);
 
-    // クラウドからデータを取得（クラウドで上書き、画像のみローカルを補完）
+    // クラウドからデータを取得（mergeProjectDataSafeでマージ、ローカルのみのカットを保護）
     const fetchFromCloud = useCallback(async () => {
         const userId = getUserId();
 
@@ -234,75 +235,41 @@ export const ProjectProvider = ({ children }) => {
             console.log('同期中のためスキップ');
             return { success: false, message: 'Already syncing' };
         }
+
+        // 操作中は割り込まない
+        if (operationInProgress) {
+            console.log('操作実行中のためスキップ');
+            return { success: false, message: 'Operation in progress' };
+        }
+
         setIsSyncing(true);
 
         try {
             setSyncStatus('syncing');
             const cloudProjects = await projectsApi.getAll(userId);
 
-            // 1. まずローカルのデータを取得（画像補完用）
-            let localProjects = [];
-            try {
-                const saved = localStorage.getItem('shooting-master-projects');
-                if (saved) {
-                    localProjects = JSON.parse(saved);
-                }
-            } catch (e) {
-                console.log('localStorage読み込み失敗');
-            }
+            // 1. まずローカルのデータを取得
+            const localProjects = getLatestProjectsFromStorage();
 
-            // 2. クラウドのデータで上書き（画像のみローカルから補完）
+            // 2. クラウドのデータをベースにmergeProjectDataSafeでマージ（ローカルのみのカットも保護）
             if (cloudProjects && cloudProjects.length > 0) {
                 const localProjectMap = new Map(localProjects.map(p => [normalizeId(p.id), p]));
 
-                // クラウドのデータをベースに、画像のみローカルから補完
                 const finalProjects = cloudProjects.map(cloudProject => {
                     const localProject = localProjectMap.get(normalizeId(cloudProject.id));
-
-                    // プロジェクト画像を補完
-                    const productImage = cloudProject.productImage || localProject?.productImage || '';
-
-                    // カットの画像・propIds・modelIdsを補完
-                    const localCutMap = new Map((localProject?.cuts || []).map(c => [normalizeId(c.id), c]));
-                    const cuts = (cloudProject.cuts || []).map(cloudCut => {
-                        const localCut = localCutMap.get(normalizeId(cloudCut.id));
-                        return {
-                            ...cloudCut,
-                            originalImage: cloudCut.originalImage || localCut?.originalImage || '',
-                            aiGeneratedImage: cloudCut.aiGeneratedImage || localCut?.aiGeneratedImage || '',
-                            propIds: (cloudCut.propIds?.length > 0) ? cloudCut.propIds : (localCut?.propIds || []),
-                            modelIds: (cloudCut.modelIds?.length > 0) ? cloudCut.modelIds : (localCut?.modelIds || []),
-                        };
-                    });
-
-                    // 小物の画像を補完
-                    const localPropMap = new Map((localProject?.props || []).map(p => [normalizeId(p.id), p]));
-                    const props = (cloudProject.props || []).map(cloudProp => {
-                        const localProp = localPropMap.get(normalizeId(cloudProp.id));
-                        return {
-                            ...cloudProp,
-                            image: cloudProp.image || localProp?.image || '',
-                        };
-                    });
-
-                    return {
-                        ...cloudProject,
-                        productImage,
-                        cuts,
-                        props,
-                    };
+                    return mergeProjectDataSafe(localProject, cloudProject);
                 });
 
-                // localStorageとstateを更新
-                try {
-                    localStorage.setItem('shooting-master-projects', JSON.stringify(finalProjects));
-                } catch (e) {
-                    console.error('localStorage保存エラー:', e);
-                }
+                // ローカルにしかないプロジェクト（まだクラウドに同期されていない）も追加
+                const cloudProjectIdSet = new Set(cloudProjects.map(p => normalizeId(p.id)));
+                const localOnlyProjects = localProjects.filter(p => !cloudProjectIdSet.has(normalizeId(p.id)));
 
-                setProjects(finalProjects);
+                const allProjects = [...finalProjects, ...localOnlyProjects];
+
+                saveToLocalStorage(allProjects);
+                setProjects(allProjects);
                 setLastSyncTime(new Date().toISOString());
-                console.log(`クラウドから取得完了: ${finalProjects.length}件のプロジェクト`);
+                console.log(`クラウドから取得完了: ${allProjects.length}件のプロジェクト`);
             }
 
             setSyncStatus('synced');
@@ -314,7 +281,7 @@ export const ProjectProvider = ({ children }) => {
             setIsSyncing(false);
             return { success: false, message: error.message };
         }
-    }, [getUserId, isSyncing]);
+    }, [getUserId, isSyncing, operationInProgress]);
 
     // クラウドから同期する関数（クラウドで上書き、画像のみローカルを補完）
     const syncFromCloud = useCallback(async (forceSync = false) => {
@@ -324,9 +291,15 @@ export const ProjectProvider = ({ children }) => {
             return;
         }
 
-        // 操作直後（5秒以内）は自動同期をスキップ（強制同期の場合は除く）
+        // 操作中（addCut/updateCut/deleteCut等の途中）はスキップ
+        if (operationInProgress) {
+            console.log('操作実行中のためスキップ');
+            return;
+        }
+
+        // 操作直後（15秒以内）は自動同期をスキップ（強制同期の場合は除く）
         const timeSinceLastOperation = Date.now() - lastOperationTime;
-        if (!forceSync && timeSinceLastOperation < 5000) {
+        if (!forceSync && timeSinceLastOperation < 15000) {
             console.log(`操作直後のためスキップ（${Math.round(timeSinceLastOperation / 1000)}秒経過）`);
             return;
         }
@@ -336,75 +309,34 @@ export const ProjectProvider = ({ children }) => {
         try {
             const cloudProjects = await projectsApi.getAll('owner');
 
-            // 1. まずローカルのデータを取得（画像補完用）
-            let localProjects = [];
-            try {
-                const saved = localStorage.getItem('shooting-master-projects');
-                if (saved) {
-                    localProjects = JSON.parse(saved);
-                }
-            } catch (e) {
-                console.log('localStorage読み込み失敗');
-            }
+            // 1. ローカルの最新データを取得
+            const localProjects = getLatestProjectsFromStorage();
 
-            // 2. クラウドのデータで上書き（画像のみローカルから補完）
+            // 2. mergeProjectDataSafeでマージ（ローカルのみのカットも保護）
             if (cloudProjects && cloudProjects.length > 0) {
                 const localProjectMap = new Map(localProjects.map(p => [normalizeId(p.id), p]));
 
-                // クラウドのデータをベースに、画像のみローカルから補完
                 const finalProjects = cloudProjects.map(cloudProject => {
                     const localProject = localProjectMap.get(normalizeId(cloudProject.id));
-
-                    // プロジェクト画像を補完
-                    const productImage = cloudProject.productImage || localProject?.productImage || '';
-
-                    // カットの画像・propIds・modelIdsを補完
-                    const localCutMap = new Map((localProject?.cuts || []).map(c => [normalizeId(c.id), c]));
-                    const cuts = (cloudProject.cuts || []).map(cloudCut => {
-                        const localCut = localCutMap.get(normalizeId(cloudCut.id));
-                        return {
-                            ...cloudCut,
-                            originalImage: cloudCut.originalImage || localCut?.originalImage || '',
-                            aiGeneratedImage: cloudCut.aiGeneratedImage || localCut?.aiGeneratedImage || '',
-                            propIds: (cloudCut.propIds?.length > 0) ? cloudCut.propIds : (localCut?.propIds || []),
-                            modelIds: (cloudCut.modelIds?.length > 0) ? cloudCut.modelIds : (localCut?.modelIds || []),
-                        };
-                    });
-
-                    // 小物の画像を補完
-                    const localPropMap = new Map((localProject?.props || []).map(p => [normalizeId(p.id), p]));
-                    const props = (cloudProject.props || []).map(cloudProp => {
-                        const localProp = localPropMap.get(normalizeId(cloudProp.id));
-                        return {
-                            ...cloudProp,
-                            image: cloudProp.image || localProp?.image || '',
-                        };
-                    });
-
-                    return {
-                        ...cloudProject,
-                        productImage,
-                        cuts,
-                        props,
-                    };
+                    return mergeProjectDataSafe(localProject, cloudProject);
                 });
 
-                // localStorageとstateを更新
-                try {
-                    localStorage.setItem('shooting-master-projects', JSON.stringify(finalProjects));
-                } catch (e) {
-                    console.error('localStorage保存エラー:', e);
-                }
+                // ローカルにしかないプロジェクトも追加
+                const cloudProjectIdSet = new Set(cloudProjects.map(p => normalizeId(p.id)));
+                const localOnlyProjects = localProjects.filter(p => !cloudProjectIdSet.has(normalizeId(p.id)));
 
-                setProjects(finalProjects);
-                console.log(`同期完了: クラウドから${finalProjects.length}件のプロジェクトで上書き`);
+                const allProjects = [...finalProjects, ...localOnlyProjects];
+
+                saveToLocalStorage(allProjects);
+                setProjects(allProjects);
+                console.log(`同期完了: ${allProjects.length}件のプロジェクト（マージ済み）`);
             }
             setIsSyncing(false);
         } catch (error) {
             console.log('自動同期スキップ（オフラインまたはAPIエラー）:', error.message);
             setIsSyncing(false);
         }
-    }, [isSyncing, lastOperationTime]);
+    }, [isSyncing, lastOperationTime, operationInProgress]);
 
     // アプリ起動時に自動でクラウドから同期（クラウドを正とする）
     useEffect(() => {
@@ -684,76 +616,28 @@ export const ProjectProvider = ({ children }) => {
         return projects.find(project => String(project.id) === String(id));
     };
 
-    // カット操作
-    const addCut = async (projectId, cutData) => {
-        const newCutId = Date.now();
-        const userId = getUserId();
-
-        // 画像をR2にアップロード（Base64の場合のみ）
-        let originalImage = cutData.originalImage || '';
-        let aiGeneratedImage = cutData.aiGeneratedImage || '';
-
-        if (userId !== 'anonymous') {
-            try {
-                if (isBase64Image(originalImage)) {
-                    const uploadedUrl = await uploadImageToR2(originalImage, userId);
-                    if (uploadedUrl !== originalImage) {
-                        originalImage = uploadedUrl;
-                        console.log('カット画像をR2にアップロード完了');
-                    }
-                }
-                if (isBase64Image(aiGeneratedImage)) {
-                    const uploadedUrl = await uploadImageToR2(aiGeneratedImage, userId);
-                    if (uploadedUrl !== aiGeneratedImage) {
-                        aiGeneratedImage = uploadedUrl;
-                        console.log('AI生成画像をR2にアップロード完了');
-                    }
-                }
-            } catch (e) {
-                console.warn('R2アップロード失敗、Base64で保存:', e);
-            }
-        }
-
-        const newCut = {
-            ...cutData,
-            id: newCutId,
-            originalImage,
-            aiGeneratedImage,
-            status: 'pending',
-            propIds: cutData.propIds || [],
-            modelIds: cutData.modelIds || [],
-            createdAt: new Date().toISOString().split('T')[0],
-        };
-
-        // 1. 現在のlocalStorageから読み込み
-        let currentProjects = [];
+    // localStorageから最新のprojectsを読み込むヘルパー
+    const getLatestProjectsFromStorage = () => {
         try {
             const saved = localStorage.getItem('shooting-master-projects');
             if (saved) {
-                currentProjects = JSON.parse(saved);
+                return JSON.parse(saved);
             }
         } catch (e) {
             console.log('localStorage読み込み失敗');
         }
+        return [];
+    };
 
-        // 2. カットを追加
-        const newProjects = currentProjects.map(project =>
-            String(project.id) === String(projectId)
-                ? { ...project, cuts: [...(project.cuts || []), newCut] }
-                : project
-        );
-
-        // 3. localStorageに即座に保存
-        let savedProjects = newProjects;
+    // localStorageに安全に保存するヘルパー（容量超過時は画像を削除して再試行）
+    const saveToLocalStorage = (projects, preserveImageId = null) => {
         try {
-            localStorage.setItem('shooting-master-projects', JSON.stringify(newProjects));
+            localStorage.setItem('shooting-master-projects', JSON.stringify(projects));
+            return projects;
         } catch (error) {
-            // 容量超過の場合、新規追加以外の古い画像を削除して再試行
             if (error.name === 'QuotaExceededError' || error.code === 22) {
                 console.warn('localStorage容量超過 - 古い画像データをクリアして再試行');
-
-                // 新規追加したカット以外の画像を削除（新規カットの画像は保持）
-                const cleanedProjects = newProjects.map(project => ({
+                const cleanedProjects = projects.map(project => ({
                     ...project,
                     productImage: project.productImage?.startsWith('data:') ? '' : project.productImage,
                     props: (project.props || []).map(prop => ({
@@ -761,8 +645,7 @@ export const ProjectProvider = ({ children }) => {
                         image: prop.image?.startsWith('data:') ? '' : prop.image,
                     })),
                     cuts: (project.cuts || []).map(cut => {
-                        // 新規追加したカットの画像は保持
-                        if (String(cut.id) === String(newCutId)) {
+                        if (preserveImageId && String(cut.id) === String(preserveImageId)) {
                             return cut;
                         }
                         return {
@@ -772,80 +655,142 @@ export const ProjectProvider = ({ children }) => {
                         };
                     })
                 }));
-
                 try {
                     localStorage.setItem('shooting-master-projects', JSON.stringify(cleanedProjects));
-                    savedProjects = cleanedProjects;
+                    return cleanedProjects;
                 } catch (retryError) {
                     alert('容量不足: 設定画面から不要なプロジェクトを削除してください');
+                    return projects;
                 }
             }
+            console.error('localStorage保存エラー:', error);
+            return projects;
         }
+    };
 
-        // 4. stateを更新
-        setProjects(savedProjects);
+    // カット操作
+    const addCut = async (projectId, cutData) => {
+        const newCutId = Date.now();
+        const userId = getUserId();
 
-        // 5. 操作時刻を記録（自動同期スキップ用）
-        setLastOperationTime(Date.now());
+        // 操作中ロックを設定（自動同期の割り込み防止）
+        setOperationInProgress(true);
 
-        // 6. クラウドにも同期（元データ=画像ありをクラウドに送信、完了を待機）
-        if (userId !== 'anonymous') {
-            // 重要: localStorageが容量不足でも、クラウドには画像ありのデータを送信
-            const updatedProject = newProjects.find(p => String(p.id) === String(projectId));
-            if (updatedProject) {
+        try {
+            // 画像をR2にアップロード（Base64の場合のみ）
+            let originalImage = cutData.originalImage || '';
+            let aiGeneratedImage = cutData.aiGeneratedImage || '';
+
+            if (userId !== 'anonymous') {
                 try {
-                    await projectsApi.update(userId, String(projectId), updatedProject);
-                    console.log('カット追加をクラウドに同期完了');
-
-                    // 7. クラウドから最新のプロジェクトを取得してローカルとマージ（重複防止＆画像保持）
-                    const cloudProject = await projectsApi.getById(userId, String(projectId));
-                    if (cloudProject) {
-                        const localProject = savedProjects.find(p => String(p.id) === String(projectId));
-                        // mergeProjectDataSafeでマージ（画像は空でない方を優先）
-                        const mergedProject = mergeProjectDataSafe(localProject, cloudProject);
-                        const syncedProjects = savedProjects.map(p =>
-                            String(p.id) === String(projectId) ? mergedProject : p
-                        );
-                        try {
-                            localStorage.setItem('shooting-master-projects', JSON.stringify(syncedProjects));
-                        } catch (e) {
-                            // 容量超過の場合は無視
+                    if (isBase64Image(originalImage)) {
+                        const uploadedUrl = await uploadImageToR2(originalImage, userId);
+                        if (uploadedUrl !== originalImage) {
+                            originalImage = uploadedUrl;
+                            console.log('カット画像をR2にアップロード完了');
                         }
-                        setProjects(syncedProjects);
-                        setLastOperationTime(Date.now()); // 再度更新
+                    }
+                    if (isBase64Image(aiGeneratedImage)) {
+                        const uploadedUrl = await uploadImageToR2(aiGeneratedImage, userId);
+                        if (uploadedUrl !== aiGeneratedImage) {
+                            aiGeneratedImage = uploadedUrl;
+                            console.log('AI生成画像をR2にアップロード完了');
+                        }
                     }
                 } catch (e) {
-                    console.error('クラウド同期エラー:', e);
+                    console.warn('R2アップロード失敗、Base64で保存:', e);
                 }
             }
-        }
 
-        return newCut;
+            const newCut = {
+                ...cutData,
+                id: newCutId,
+                originalImage,
+                aiGeneratedImage,
+                status: 'pending',
+                propIds: cutData.propIds || [],
+                modelIds: cutData.modelIds || [],
+                createdAt: new Date().toISOString().split('T')[0],
+            };
+
+            // 1. 現在のlocalStorageから最新データを読み込み
+            const currentProjects = getLatestProjectsFromStorage();
+
+            // 2. カットを追加
+            const newProjects = currentProjects.map(project =>
+                String(project.id) === String(projectId)
+                    ? { ...project, cuts: [...(project.cuts || []), newCut] }
+                    : project
+            );
+
+            // 3. localStorageに即座に保存
+            const savedProjects = saveToLocalStorage(newProjects, newCutId);
+
+            // 4. stateを更新
+            setProjects(savedProjects);
+
+            // 5. 操作時刻を記録（自動同期スキップ用）
+            setLastOperationTime(Date.now());
+
+            // 6. クラウドにも同期（元データ=画像ありをクラウドに送信、完了を待機）
+            if (userId !== 'anonymous') {
+                const updatedProject = newProjects.find(p => String(p.id) === String(projectId));
+                if (updatedProject) {
+                    try {
+                        await projectsApi.update(userId, String(projectId), updatedProject);
+                        console.log('カット追加をクラウドに同期完了');
+
+                        // 7. クラウドから最新のプロジェクトを取得してローカルとマージ
+                        const cloudProject = await projectsApi.getById(userId, String(projectId));
+                        if (cloudProject) {
+                            // 重要: マージ時は最新のlocalStorageから読み込む（他の操作が割り込んでいる可能性）
+                            const latestProjects = getLatestProjectsFromStorage();
+                            const latestLocalProject = latestProjects.find(p => String(p.id) === String(projectId));
+                            const mergedProject = mergeProjectDataSafe(latestLocalProject, cloudProject);
+                            const syncedProjects = latestProjects.map(p =>
+                                String(p.id) === String(projectId) ? mergedProject : p
+                            );
+                            saveToLocalStorage(syncedProjects);
+                            setProjects(syncedProjects);
+                            setLastOperationTime(Date.now());
+                        }
+                    } catch (e) {
+                        console.error('クラウド同期エラー:', e);
+                    }
+                }
+            }
+
+            return newCut;
+        } finally {
+            // 操作中ロックを解除
+            setOperationInProgress(false);
+        }
     };
 
     const updateCut = async (projectId, cutId, cutData) => {
         const userId = getUserId();
+        setOperationInProgress(true);
 
-        // 画像をR2にアップロード（Base64の場合のみ）
-        let updatedCutData = { ...cutData };
+        try {
+            // 画像をR2にアップロード（Base64の場合のみ）
+            let updatedCutData = { ...cutData };
 
-        if (userId !== 'anonymous') {
-            try {
-                if (isBase64Image(cutData.originalImage)) {
-                    updatedCutData.originalImage = await uploadImageToR2(cutData.originalImage, userId);
+            if (userId !== 'anonymous') {
+                try {
+                    if (isBase64Image(cutData.originalImage)) {
+                        updatedCutData.originalImage = await uploadImageToR2(cutData.originalImage, userId);
+                    }
+                    if (isBase64Image(cutData.aiGeneratedImage)) {
+                        updatedCutData.aiGeneratedImage = await uploadImageToR2(cutData.aiGeneratedImage, userId);
+                    }
+                } catch (e) {
+                    console.warn('R2アップロード失敗:', e);
                 }
-                if (isBase64Image(cutData.aiGeneratedImage)) {
-                    updatedCutData.aiGeneratedImage = await uploadImageToR2(cutData.aiGeneratedImage, userId);
-                }
-            } catch (e) {
-                console.warn('R2アップロード失敗:', e);
             }
-        }
 
-        // 関数型のステート更新を使用して最新のステートを取得
-        let newProjects = [];
-        setProjects(prevProjects => {
-            newProjects = prevProjects.map(project =>
+            // localStorageから最新のデータを取得して更新（レースコンディション防止）
+            const currentProjects = getLatestProjectsFromStorage();
+            const newProjects = currentProjects.map(project =>
                 String(project.id) === String(projectId)
                     ? {
                         ...project,
@@ -855,90 +800,66 @@ export const ProjectProvider = ({ children }) => {
                     }
                     : project
             );
-            return newProjects;
-        });
 
-        // localStorageにも保存（少し遅延させてステート更新を待つ）
-        await new Promise(resolve => setTimeout(resolve, 0));
+            saveToLocalStorage(newProjects);
+            setProjects(newProjects);
 
-        // localStorageから最新のデータを取得して保存
-        try {
-            const saved = localStorage.getItem('shooting-master-projects');
-            if (saved) {
-                const currentProjects = JSON.parse(saved);
-                const updatedProjects = currentProjects.map(project =>
-                    String(project.id) === String(projectId)
-                        ? {
-                            ...project,
-                            cuts: (project.cuts || []).map(cut =>
-                                String(cut.id) === String(cutId) ? { ...cut, ...updatedCutData } : cut
-                            )
-                        }
-                        : project
-                );
-                localStorage.setItem('shooting-master-projects', JSON.stringify(updatedProjects));
-                newProjects = updatedProjects;
-            }
-        } catch (error) {
-            console.error('localStorage保存エラー:', error);
-        }
+            // 操作時刻を記録（自動同期スキップ用）
+            setLastOperationTime(Date.now());
 
-        // 操作時刻を記録（自動同期スキップ用）
-        setLastOperationTime(Date.now());
-
-        // クラウドにも同期（完了を待機）
-        if (userId !== 'anonymous') {
-            const updatedProject = newProjects.find(p => String(p.id) === String(projectId));
-            if (updatedProject) {
-                try {
-                    await projectsApi.update(userId, String(projectId), updatedProject);
-                    console.log('カット更新をクラウドに同期完了');
-                } catch (e) {
-                    console.error('クラウド同期エラー:', e);
+            // クラウドにも同期（完了を待機）
+            if (userId !== 'anonymous') {
+                const updatedProject = newProjects.find(p => String(p.id) === String(projectId));
+                if (updatedProject) {
+                    try {
+                        await projectsApi.update(userId, String(projectId), updatedProject);
+                        console.log('カット更新をクラウドに同期完了');
+                    } catch (e) {
+                        console.error('クラウド同期エラー:', e);
+                    }
                 }
             }
+        } finally {
+            setOperationInProgress(false);
         }
     };
 
     const deleteCut = async (projectId, cutId) => {
-        // 1. 現在のステートからプロジェクトを取得
-        const currentProjects = [...projects];
-
-        // 2. カットを削除
-        const newProjects = currentProjects.map(project =>
-            String(project.id) === String(projectId)
-                ? { ...project, cuts: (project.cuts || []).filter(cut => String(cut.id) !== String(cutId)) }
-                : project
-        );
-
-        // 3. stateを即座に更新
-        setProjects(newProjects);
-
-        // 4. localStorageにも保存
-        try {
-            localStorage.setItem('shooting-master-projects', JSON.stringify(newProjects));
-        } catch (error) {
-            console.error('localStorage保存エラー:', error);
-        }
-
-        // 4. stateを更新
-        setProjects(newProjects);
-
-        // 5. 操作時刻を記録（自動同期スキップ用）
-        setLastOperationTime(Date.now());
-
-        // 6. クラウドにも同期（削除を反映）
         const userId = getUserId();
-        if (userId !== 'anonymous') {
-            const updatedProject = newProjects.find(p => String(p.id) === String(projectId));
-            if (updatedProject) {
-                try {
-                    await projectsApi.update(userId, String(projectId), updatedProject);
-                    console.log('カット削除をクラウドに同期完了');
-                } catch (e) {
-                    console.error('クラウド同期エラー:', e);
+        setOperationInProgress(true);
+
+        try {
+            // 1. localStorageから最新データを取得（古いstateを参照しない）
+            const currentProjects = getLatestProjectsFromStorage();
+
+            // 2. カットを削除
+            const newProjects = currentProjects.map(project =>
+                String(project.id) === String(projectId)
+                    ? { ...project, cuts: (project.cuts || []).filter(cut => String(cut.id) !== String(cutId)) }
+                    : project
+            );
+
+            // 3. localStorageに保存 + state更新
+            saveToLocalStorage(newProjects);
+            setProjects(newProjects);
+
+            // 4. 操作時刻を記録（自動同期スキップ用）
+            setLastOperationTime(Date.now());
+
+            // 5. クラウドにも同期（削除を反映）
+            if (userId !== 'anonymous') {
+                const updatedProject = newProjects.find(p => String(p.id) === String(projectId));
+                if (updatedProject) {
+                    try {
+                        await projectsApi.update(userId, String(projectId), updatedProject);
+                        console.log('カット削除をクラウドに同期完了');
+                    } catch (e) {
+                        console.error('クラウド同期エラー:', e);
+                    }
                 }
             }
+        } finally {
+            setOperationInProgress(false);
         }
     };
 
@@ -1005,124 +926,81 @@ export const ProjectProvider = ({ children }) => {
     const addProp = async (projectId, propData) => {
         const newPropId = Date.now();
         const userId = getUserId();
+        setOperationInProgress(true);
 
-        // 画像をR2にアップロード（Base64の場合のみ）
-        let propImage = propData.image || '';
-
-        if (userId !== 'anonymous' && isBase64Image(propImage)) {
-            try {
-                const uploadedUrl = await uploadImageToR2(propImage, userId);
-                if (uploadedUrl !== propImage) {
-                    propImage = uploadedUrl;
-                    console.log('小物画像をR2にアップロード完了');
-                }
-            } catch (e) {
-                console.warn('R2アップロード失敗、Base64で保存:', e);
-            }
-        }
-
-        const newProp = {
-            ...propData,
-            id: newPropId,
-            image: propImage,
-            checked: false,
-        };
-
-        // 1. 現在のlocalStorageから読み込み
-        let currentProjects = [];
         try {
-            const saved = localStorage.getItem('shooting-master-projects');
-            if (saved) {
-                currentProjects = JSON.parse(saved);
-            }
-        } catch (e) {
-            console.log('localStorage読み込み失敗');
-        }
+            // 画像をR2にアップロード（Base64の場合のみ）
+            let propImage = propData.image || '';
 
-        // 2. 小物を追加
-        const newProjects = currentProjects.map(project =>
-            String(project.id) === String(projectId)
-                ? { ...project, props: [...(project.props || []), newProp] }
-                : project
-        );
-
-        // 3. localStorageに即座に保存
-        let savedProjects = newProjects;
-        try {
-            localStorage.setItem('shooting-master-projects', JSON.stringify(newProjects));
-        } catch (error) {
-            // 容量超過の場合、新規追加以外の古い画像を削除して再試行
-            if (error.name === 'QuotaExceededError' || error.code === 22) {
-                console.warn('localStorage容量超過 - 古い画像データをクリアして再試行');
-
-                // 新規追加した小物以外の画像を削除（新規小物の画像は保持）
-                const cleanedProjects = newProjects.map(project => ({
-                    ...project,
-                    productImage: project.productImage?.startsWith('data:') ? '' : project.productImage,
-                    props: (project.props || []).map(prop => {
-                        // 新規追加した小物の画像は保持
-                        if (String(prop.id) === String(newPropId)) {
-                            return prop;
-                        }
-                        return {
-                            ...prop,
-                            image: prop.image?.startsWith('data:') ? '' : prop.image,
-                        };
-                    }),
-                    cuts: (project.cuts || []).map(cut => ({
-                        ...cut,
-                        originalImage: cut.originalImage?.startsWith('data:') ? '' : cut.originalImage,
-                        aiGeneratedImage: cut.aiGeneratedImage?.startsWith('data:') ? '' : cut.aiGeneratedImage,
-                    }))
-                }));
-
+            if (userId !== 'anonymous' && isBase64Image(propImage)) {
                 try {
-                    localStorage.setItem('shooting-master-projects', JSON.stringify(cleanedProjects));
-                    savedProjects = cleanedProjects;
-                } catch (retryError) {
-                    alert('容量不足: 設定画面から不要なプロジェクトを削除してください');
-                }
-            }
-        }
-
-        // 4. stateを更新
-        setProjects(savedProjects);
-
-        // 5. 操作時刻を記録（自動同期スキップ用）
-        setLastOperationTime(Date.now());
-
-        // 6. クラウドにも同期（元データ=画像ありをクラウドに送信、完了を待機）
-        if (userId !== 'anonymous') {
-            // 重要: localStorageが容量不足でも、クラウドには画像ありのデータを送信
-            const updatedProject = newProjects.find(p => String(p.id) === String(projectId));
-            if (updatedProject) {
-                try {
-                    await projectsApi.update(userId, String(projectId), updatedProject);
-                    console.log('小物追加をクラウドに同期完了');
-
-                    // 7. クラウドから最新のプロジェクトを取得してローカルとマージ（重複防止＆画像保持）
-                    const cloudProject = await projectsApi.getById(userId, String(projectId));
-                    if (cloudProject) {
-                        const localProject = savedProjects.find(p => String(p.id) === String(projectId));
-                        const mergedProject = mergeProjectDataSafe(localProject, cloudProject);
-                        const syncedProjects = savedProjects.map(p =>
-                            String(p.id) === String(projectId) ? mergedProject : p
-                        );
-                        try {
-                            localStorage.setItem('shooting-master-projects', JSON.stringify(syncedProjects));
-                        } catch (e) {
-                            // 容量超過の場合は無視
-                        }
-                        setProjects(syncedProjects);
-                        setLastOperationTime(Date.now());
+                    const uploadedUrl = await uploadImageToR2(propImage, userId);
+                    if (uploadedUrl !== propImage) {
+                        propImage = uploadedUrl;
+                        console.log('小物画像をR2にアップロード完了');
                     }
                 } catch (e) {
-                    console.error('クラウド同期エラー:', e);
+                    console.warn('R2アップロード失敗、Base64で保存:', e);
                 }
             }
-        }
 
-        return newProp;
+            const newProp = {
+                ...propData,
+                id: newPropId,
+                image: propImage,
+                checked: false,
+            };
+
+            // 1. localStorageから最新データを読み込み
+            const currentProjects = getLatestProjectsFromStorage();
+
+            // 2. 小物を追加
+            const newProjects = currentProjects.map(project =>
+                String(project.id) === String(projectId)
+                    ? { ...project, props: [...(project.props || []), newProp] }
+                    : project
+            );
+
+            // 3. localStorageに保存
+            const savedProjects = saveToLocalStorage(newProjects, newPropId);
+
+            // 4. stateを更新
+            setProjects(savedProjects);
+
+            // 5. 操作時刻を記録（自動同期スキップ用）
+            setLastOperationTime(Date.now());
+
+            // 6. クラウドにも同期
+            if (userId !== 'anonymous') {
+                const updatedProject = newProjects.find(p => String(p.id) === String(projectId));
+                if (updatedProject) {
+                    try {
+                        await projectsApi.update(userId, String(projectId), updatedProject);
+                        console.log('小物追加をクラウドに同期完了');
+
+                        // 7. クラウドから最新のプロジェクトを取得してマージ
+                        const cloudProject = await projectsApi.getById(userId, String(projectId));
+                        if (cloudProject) {
+                            const latestProjects = getLatestProjectsFromStorage();
+                            const latestLocalProject = latestProjects.find(p => String(p.id) === String(projectId));
+                            const mergedProject = mergeProjectDataSafe(latestLocalProject, cloudProject);
+                            const syncedProjects = latestProjects.map(p =>
+                                String(p.id) === String(projectId) ? mergedProject : p
+                            );
+                            saveToLocalStorage(syncedProjects);
+                            setProjects(syncedProjects);
+                            setLastOperationTime(Date.now());
+                        }
+                    } catch (e) {
+                        console.error('クラウド同期エラー:', e);
+                    }
+                }
+            }
+
+            return newProp;
+        } finally {
+            setOperationInProgress(false);
+        }
     };
 
     const updateProp = async (projectId, propId, propData) => {

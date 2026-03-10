@@ -89,43 +89,47 @@ export async function onRequestPut(context) {
        WHERE id = ?`
     ).bind(name, description || '', productImage || '', status || 'planning', shootingDate || '', category || '', id).run();
 
-    // Delete existing props and cuts
-    await env.DB.prepare('DELETE FROM props WHERE project_id = ?').bind(id).run();
-    await env.DB.prepare('DELETE FROM cut_props WHERE cut_id IN (SELECT id FROM cuts WHERE project_id = ?)').bind(id).run();
-    await env.DB.prepare('DELETE FROM cut_models WHERE cut_id IN (SELECT id FROM cuts WHERE project_id = ?)').bind(id).run();
-    await env.DB.prepare('DELETE FROM cuts WHERE project_id = ?').bind(id).run();
+    // propsが明示的に提供された場合のみ再作成（undefinedの場合は既存データを保持）
+    if (props !== undefined) {
+      await env.DB.prepare('DELETE FROM props WHERE project_id = ?').bind(id).run();
 
-    // Re-insert props
-    if (props && props.length > 0) {
-      for (const prop of props) {
-        await env.DB.prepare(
-          `INSERT INTO props (id, project_id, name, category, image, checked, notes, delivery)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-        ).bind(prop.id, id, prop.name, prop.category || '', prop.image || '', prop.checked ? 1 : 0, prop.notes || '', prop.delivery || '').run();
+      if (props && props.length > 0) {
+        for (const prop of props) {
+          await env.DB.prepare(
+            `INSERT INTO props (id, project_id, name, category, image, checked, notes, delivery)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+          ).bind(prop.id, id, prop.name, prop.category || '', prop.image || '', prop.checked ? 1 : 0, prop.notes || '', prop.delivery || '').run();
+        }
       }
     }
 
-    // Re-insert cuts
-    if (cuts && cuts.length > 0) {
-      for (const cut of cuts) {
-        await env.DB.prepare(
-          `INSERT INTO cuts (id, project_id, title, scene, original_image, ai_generated_image, angle, lighting, comments, status)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-        ).bind(cut.id, id, cut.title, cut.scene || '', cut.originalImage || '', cut.aiGeneratedImage || '', cut.angle || '', cut.lighting || '', cut.comments || '', cut.status || 'draft').run();
+    // cutsが明示的に提供された場合のみ再作成（undefinedの場合は既存データを保持）
+    if (cuts !== undefined) {
+      await env.DB.prepare('DELETE FROM cut_props WHERE cut_id IN (SELECT id FROM cuts WHERE project_id = ?)').bind(id).run();
+      await env.DB.prepare('DELETE FROM cut_models WHERE cut_id IN (SELECT id FROM cuts WHERE project_id = ?)').bind(id).run();
+      await env.DB.prepare('DELETE FROM cuts WHERE project_id = ?').bind(id).run();
 
-        if (cut.propIds && cut.propIds.length > 0) {
-          for (const propId of cut.propIds) {
-            await env.DB.prepare(
-              'INSERT OR IGNORE INTO cut_props (cut_id, prop_id) VALUES (?, ?)'
-            ).bind(cut.id, propId).run();
+      if (cuts && cuts.length > 0) {
+        for (const cut of cuts) {
+          await env.DB.prepare(
+            `INSERT INTO cuts (id, project_id, title, scene, original_image, ai_generated_image, angle, lighting, comments, status)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          ).bind(cut.id, id, cut.title, cut.scene || '', cut.originalImage || '', cut.aiGeneratedImage || '', cut.angle || '', cut.lighting || '', cut.comments || '', cut.status || 'draft').run();
+
+          if (cut.propIds && cut.propIds.length > 0) {
+            for (const propId of cut.propIds) {
+              await env.DB.prepare(
+                'INSERT OR IGNORE INTO cut_props (cut_id, prop_id) VALUES (?, ?)'
+              ).bind(cut.id, propId).run();
+            }
           }
-        }
 
-        if (cut.modelIds && cut.modelIds.length > 0) {
-          for (const modelId of cut.modelIds) {
-            await env.DB.prepare(
-              'INSERT OR IGNORE INTO cut_models (cut_id, model_id) VALUES (?, ?)'
-            ).bind(cut.id, modelId).run();
+          if (cut.modelIds && cut.modelIds.length > 0) {
+            for (const modelId of cut.modelIds) {
+              await env.DB.prepare(
+                'INSERT OR IGNORE INTO cut_models (cut_id, model_id) VALUES (?, ?)'
+              ).bind(cut.id, modelId).run();
+            }
           }
         }
       }
