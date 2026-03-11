@@ -252,20 +252,6 @@ const CutAdd = () => {
                                     <img src={imagePreview} alt="Preview" className="w-full h-full object-contain bg-black" />
                                 </div>
                                 {errors.image && <p className="text-red-500 text-xs text-center">{errors.image}</p>}
-                                <div className="flex gap-3">
-                                    <button
-                                        onClick={() => { setOriginalImage(null); setImagePreview(null); }}
-                                        className="flex-1 py-3 rounded-xl border border-gray-200 dark:border-gray-700 font-medium"
-                                    >
-                                        撮り直す
-                                    </button>
-                                    <button
-                                        onClick={() => setStep(2)}
-                                        className="flex-1 py-3 rounded-xl bg-primary text-white font-medium"
-                                    >
-                                        次へ
-                                    </button>
-                                </div>
                             </>
                         ) : (
                             <>
@@ -289,14 +275,6 @@ const CutAdd = () => {
                                     </button>
                                 </div>
                                 {errors.image && <p className="text-red-500 text-xs text-center">{errors.image}</p>}
-
-                                {/* スキップオプション */}
-                                <button
-                                    onClick={() => setStep(2)}
-                                    className="w-full py-3 text-sm text-gray-500 hover:text-gray-700 transition-colors"
-                                >
-                                    画像なしで続ける
-                                </button>
                             </>
                         )}
                     </section>
@@ -350,32 +328,6 @@ const CutAdd = () => {
                         </div>
 
                         {errors.ai && <p className="text-red-500 text-xs text-center">{errors.ai}</p>}
-
-                        <div className="flex gap-3 pt-4">
-                            <button
-                                onClick={() => setStep(1)}
-                                className="flex-1 py-3 rounded-xl border border-gray-200 dark:border-gray-700 font-medium"
-                            >
-                                戻る
-                            </button>
-                            <button
-                                onClick={handleGenerateAI}
-                                disabled={isGenerating}
-                                className="flex-1 py-3 rounded-xl bg-primary text-white font-medium flex items-center justify-center gap-2 disabled:opacity-50"
-                            >
-                                {isGenerating ? (
-                                    <>
-                                        <span className="animate-spin material-symbols-outlined text-lg">progress_activity</span>
-                                        生成中...
-                                    </>
-                                ) : (
-                                    <>
-                                        <span className="material-symbols-outlined text-lg">auto_awesome</span>
-                                        AIで生成
-                                    </>
-                                )}
-                            </button>
-                        </div>
 
                         <button
                             onClick={() => { setAiGeneratedImage(null); setStep(3); }}
@@ -596,7 +548,67 @@ const CutAdd = () => {
                             )}
                         </div>
 
-                        <div className="flex gap-3 pt-4">
+                    </section>
+                )}
+            </main>
+
+            {/* Fixed Footer - always visible at bottom */}
+            <footer className="fixed bottom-0 left-0 right-0 p-4 bg-white/90 dark:bg-background-dark/90 backdrop-blur-lg border-t border-gray-100 dark:border-gray-800 z-50">
+                <div className="flex gap-3 max-w-md mx-auto">
+                    {step === 1 ? (
+                        <>
+                            {imagePreview ? (
+                                <>
+                                    <button
+                                        onClick={() => { setOriginalImage(null); setImagePreview(null); }}
+                                        className="flex-1 py-3 rounded-xl border border-gray-200 dark:border-gray-700 font-medium"
+                                    >
+                                        撮り直す
+                                    </button>
+                                    <button
+                                        onClick={() => setStep(2)}
+                                        className="flex-1 py-3 rounded-xl bg-primary text-white font-medium"
+                                    >
+                                        次へ
+                                    </button>
+                                </>
+                            ) : (
+                                <button
+                                    onClick={() => setStep(2)}
+                                    className="flex-1 py-3 text-sm text-gray-500 hover:text-gray-700 transition-colors"
+                                >
+                                    画像なしで続ける
+                                </button>
+                            )}
+                        </>
+                    ) : step === 2 ? (
+                        <>
+                            <button
+                                onClick={() => setStep(1)}
+                                className="flex-1 py-3 rounded-xl border border-gray-200 dark:border-gray-700 font-medium"
+                            >
+                                戻る
+                            </button>
+                            <button
+                                onClick={handleGenerateAI}
+                                disabled={isGenerating}
+                                className="flex-1 py-3 rounded-xl bg-primary text-white font-medium flex items-center justify-center gap-2 disabled:opacity-50"
+                            >
+                                {isGenerating ? (
+                                    <>
+                                        <span className="animate-spin material-symbols-outlined text-lg">progress_activity</span>
+                                        生成中...
+                                    </>
+                                ) : (
+                                    <>
+                                        <span className="material-symbols-outlined text-lg">auto_awesome</span>
+                                        AIで生成
+                                    </>
+                                )}
+                            </button>
+                        </>
+                    ) : (
+                        <>
                             <button
                                 onClick={() => setStep(2)}
                                 className="flex-1 py-3 rounded-xl border border-gray-200 dark:border-gray-700 font-medium"
@@ -610,10 +622,10 @@ const CutAdd = () => {
                                 <span className="material-symbols-outlined text-lg">add</span>
                                 カットを追加
                             </button>
-                        </div>
-                    </section>
-                )}
-            </main>
+                        </>
+                    )}
+                </div>
+            </footer>
         </div>
     );
 };
