@@ -46,61 +46,24 @@ const FinalPreview = () => {
         return (project.props || []).filter(p => p.category !== 'product');
     }, [project]);
 
-    // 商品別カットをグルーピング
-    const cutsByProduct = useMemo(() => {
-        if (!project) return [];
+    // シーン別カットをグルーピング（カットの重複なし）
+    const cutsByScene = useMemo(() => {
+        if (!project || !project.cuts || project.cuts.length === 0) return [];
 
-        const grouped = [];
-
-        // 各商品ごとにカットをグルーピング
-        products.forEach(product => {
-            const productCuts = project.cuts.filter(cut =>
-                (cut.propIds || []).includes(product.id)
-            );
-            if (productCuts.length > 0) {
-                // シーン別にさらにグルーピング
-                const scenes = {};
-                productCuts.forEach(cut => {
-                    const scene = cut.scene || 'その他';
-                    if (!scenes[scene]) {
-                        scenes[scene] = [];
-                    }
-                    scenes[scene].push(cut);
-                });
-                grouped.push({
-                    product,
-                    scenes,
-                    totalCuts: productCuts.length,
-                });
+        const sceneMap = {};
+        project.cuts.forEach(cut => {
+            const scene = cut.scene || 'その他';
+            if (!sceneMap[scene]) {
+                sceneMap[scene] = [];
             }
+            sceneMap[scene].push(cut);
         });
 
-        // 商品に紐づいていないカット
-        const unassignedCuts = project.cuts.filter(cut => {
-            const cutProductIds = (cut.propIds || []).filter(propId =>
-                products.some(p => p.id === propId)
-            );
-            return cutProductIds.length === 0;
-        });
-
-        if (unassignedCuts.length > 0) {
-            const scenes = {};
-            unassignedCuts.forEach(cut => {
-                const scene = cut.scene || 'その他';
-                if (!scenes[scene]) {
-                    scenes[scene] = [];
-                }
-                scenes[scene].push(cut);
-            });
-            grouped.push({
-                product: null,
-                scenes,
-                totalCuts: unassignedCuts.length,
-            });
-        }
-
-        return grouped;
-    }, [project, products]);
+        return Object.entries(sceneMap).map(([sceneName, cuts]) => ({
+            sceneName,
+            cuts,
+        }));
+    }, [project]);
 
     if (!project) {
         return (
@@ -389,171 +352,147 @@ const FinalPreview = () => {
                     </section>
                 )}
 
-                {/* ===== 商品別カット詳細 ===== */}
-                {cutsByProduct.length > 0 && (
+                {/* ===== 撮影カット一覧（シーン別・重複なし） ===== */}
+                {cutsByScene.length > 0 && (
                     <section>
                         <h2 className="text-sm lg:text-base font-bold text-slate-400 uppercase tracking-widest mb-4 lg:mb-6 flex items-center gap-2">
                             <span className="material-symbols-outlined text-primary">photo_library</span>
-                            撮影カット詳細
+                            撮影カット一覧
                         </h2>
 
-                        <div className="space-y-8 lg:space-y-10">
-                            {cutsByProduct.map((group, groupIdx) => (
-                                <div key={group.product?.id || 'unassigned'} className="print:break-inside-avoid-page">
-                                    {/* 商品ヘッダー */}
-                                    <div className={`flex items-center gap-3 p-3 rounded-t-xl ${
-                                        group.product
-                                            ? 'bg-blue-500/20 border border-blue-500/30 print:bg-blue-50 print:border-blue-200'
-                                            : 'bg-gray-500/20 border border-gray-500/30 print:bg-gray-100 print:border-gray-300'
-                                    }`}>
-                                        {group.product ? (
-                                            <>
-                                                {group.product.image ? (
-                                                    <div className="w-12 h-12 rounded-lg overflow-hidden bg-gray-800 shrink-0">
-                                                        <img src={group.product.image} alt="" className="w-full h-full object-cover" />
-                                                    </div>
-                                                ) : (
-                                                    <div className="w-12 h-12 rounded-lg bg-blue-500/30 flex items-center justify-center shrink-0">
-                                                        <span className="material-symbols-outlined text-xl text-blue-400">inventory_2</span>
-                                                    </div>
-                                                )}
-                                                <div className="flex-1">
-                                                    <p className="text-[10px] text-blue-400 font-bold uppercase">商品 {groupIdx + 1}</p>
-                                                    <h3 className="text-base font-bold">{group.product.name}</h3>
-                                                </div>
-                                            </>
-                                        ) : (
-                                            <div className="flex-1">
-                                                <h3 className="text-base font-bold text-slate-400">その他のカット</h3>
-                                            </div>
-                                        )}
+                        <div className="space-y-6 lg:space-y-8">
+                            {cutsByScene.map((group, groupIdx) => (
+                                <div key={group.sceneName} className="print:break-inside-avoid-page">
+                                    {/* シーンヘッダー */}
+                                    <div className="flex items-center gap-3 p-3 rounded-t-xl bg-purple-500/10 border border-purple-500/30 print:bg-purple-50 print:border-purple-200">
+                                        <div className="w-10 h-10 rounded-lg bg-purple-500/30 flex items-center justify-center shrink-0">
+                                            <span className="material-symbols-outlined text-xl text-purple-400">movie</span>
+                                        </div>
+                                        <div className="flex-1">
+                                            <p className="text-[10px] text-purple-400 font-bold uppercase">SCENE</p>
+                                            <h3 className="text-base font-bold">{group.sceneName}</h3>
+                                        </div>
                                         <div className="text-right">
-                                            <p className="text-lg font-bold text-primary">{group.totalCuts}</p>
+                                            <p className="text-lg font-bold text-primary">{group.cuts.length}</p>
                                             <p className="text-[10px] text-slate-400">カット</p>
                                         </div>
                                     </div>
 
-                                    {/* シーン別カット */}
-                                    <div className="border-x border-b border-white/10 rounded-b-xl overflow-hidden print:border-gray-200">
-                                        {Object.entries(group.scenes).map(([sceneName, cuts], sceneIdx) => (
-                                            <div key={sceneName} className={sceneIdx > 0 ? 'border-t border-white/10 print:border-gray-200' : ''}>
-                                                {/* シーンヘッダー */}
-                                                <div className="bg-purple-500/10 px-4 py-2 flex items-center gap-2 print:bg-purple-50">
-                                                    <span className="material-symbols-outlined text-sm text-purple-400">movie</span>
-                                                    <span className="text-xs font-bold text-purple-400">{sceneName}</span>
-                                                    <span className="text-[10px] text-slate-500 ml-auto">{cuts.length}カット</span>
-                                                </div>
-
-                                                {/* カット一覧 - grid on desktop */}
-                                                <div className="divide-y lg:divide-y-0 divide-white/5 print:divide-gray-200 lg:grid lg:grid-cols-2 xl:grid-cols-3 lg:gap-4 lg:p-4">
-                                                    {cuts.map((cut) => {
-                                                        const cutProps = getPropsForCut(id, cut.id);
-                                                        const globalIndex = project.cuts.findIndex(c => c.id === cut.id);
-                                                        return (
-                                                            <article key={cut.id} className="p-4 lg:p-0 lg:border lg:border-white/10 lg:rounded-xl lg:overflow-hidden print:break-inside-avoid print:border print:border-gray-200 print:rounded-lg print:mb-3">
-                                                                <div className="flex lg:flex-col gap-4 lg:gap-0">
-                                                                    {/* サムネイル */}
-                                                                    <div className="w-28 lg:w-full shrink-0">
-                                                                        <div className="aspect-[4/3] lg:aspect-video rounded-lg lg:rounded-none overflow-hidden bg-gray-800 print:bg-gray-200 relative">
-                                                                            {cut.aiGeneratedImage ? (
-                                                                                <>
-                                                                                    <img src={cut.aiGeneratedImage} alt="" className="w-full h-full object-cover" />
-                                                                                    <div className="absolute top-1 left-1 bg-purple-500 text-white text-[8px] px-1 py-0.5 rounded flex items-center gap-0.5">
-                                                                                        <span className="material-symbols-outlined text-[10px]">auto_awesome</span>
-                                                                                        AI
-                                                                                    </div>
-                                                                                </>
-                                                                            ) : cut.originalImage ? (
-                                                                                <img src={cut.originalImage} alt="" className="w-full h-full object-cover" />
-                                                                            ) : (
-                                                                                <div className="w-full h-full flex items-center justify-center">
-                                                                                    <span className="material-symbols-outlined text-2xl text-gray-600">image</span>
-                                                                                </div>
-                                                                            )}
+                                    {/* カット一覧 */}
+                                    <div className="border-x border-b border-white/10 rounded-b-xl overflow-hidden print:border-gray-200 divide-y lg:divide-y-0 divide-white/5 print:divide-gray-200 lg:grid lg:grid-cols-2 xl:grid-cols-3 lg:gap-4 lg:p-4">
+                                        {group.cuts.map((cut) => {
+                                            const cutProps = getPropsForCut(id, cut.id);
+                                            const cutProducts = cutProps.filter(p => p.category === 'product');
+                                            const cutOtherProps = cutProps.filter(p => p.category !== 'product');
+                                            const globalIndex = project.cuts.findIndex(c => c.id === cut.id);
+                                            return (
+                                                <article key={cut.id} className="p-4 lg:p-0 lg:border lg:border-white/10 lg:rounded-xl lg:overflow-hidden print:break-inside-avoid print:border print:border-gray-200 print:rounded-lg print:mb-3">
+                                                    <div className="flex lg:flex-col gap-4 lg:gap-0">
+                                                        {/* サムネイル */}
+                                                        <div className="w-28 lg:w-full shrink-0">
+                                                            <div className="aspect-[4/3] lg:aspect-video rounded-lg lg:rounded-none overflow-hidden bg-gray-800 print:bg-gray-200 relative">
+                                                                {cut.aiGeneratedImage ? (
+                                                                    <>
+                                                                        <img src={cut.aiGeneratedImage} alt="" className="w-full h-full object-cover" />
+                                                                        <div className="absolute top-1 left-1 bg-purple-500 text-white text-[8px] px-1 py-0.5 rounded flex items-center gap-0.5">
+                                                                            <span className="material-symbols-outlined text-[10px]">auto_awesome</span>
+                                                                            AI
                                                                         </div>
-                                                                        <div className="mt-1 text-center">
-                                                                            <span className="text-xs font-bold text-primary">
-                                                                                CUT #{String(globalIndex + 1).padStart(2, '0')}
-                                                                            </span>
-                                                                        </div>
+                                                                    </>
+                                                                ) : cut.originalImage ? (
+                                                                    <img src={cut.originalImage} alt="" className="w-full h-full object-cover" />
+                                                                ) : (
+                                                                    <div className="w-full h-full flex items-center justify-center">
+                                                                        <span className="material-symbols-outlined text-2xl text-gray-600">image</span>
                                                                     </div>
+                                                                )}
+                                                            </div>
+                                                            <div className="mt-1 text-center">
+                                                                <span className="text-xs font-bold text-primary">
+                                                                    CUT #{String(globalIndex + 1).padStart(2, '0')}
+                                                                </span>
+                                                            </div>
+                                                        </div>
 
-                                                                    {/* カット詳細 */}
-                                                                    <div className="flex-1 min-w-0 space-y-2 lg:p-4">
-                                                                        <div className="flex items-start justify-between gap-2">
-                                                                            <h4 className="text-sm font-bold">{cut.title}</h4>
-                                                                            <span className={`text-[10px] px-2 py-0.5 rounded shrink-0 ${
-                                                                                cut.status === 'completed'
-                                                                                    ? 'bg-green-500/20 text-green-400 print:bg-green-100 print:text-green-700'
-                                                                                    : 'bg-gray-500/20 text-gray-400 print:bg-gray-100 print:text-gray-600'
-                                                                            }`}>
-                                                                                {cut.status === 'completed' ? '完了' : '未完了'}
+                                                        {/* カット詳細 */}
+                                                        <div className="flex-1 min-w-0 space-y-2 lg:p-4">
+                                                            <h4 className="text-sm font-bold">{cut.title}</h4>
+
+                                                            {/* アングル・ライティング */}
+                                                            <div className="flex flex-wrap gap-1.5">
+                                                                {cut.angle && (
+                                                                    <span className="text-[10px] bg-white/10 px-2 py-0.5 rounded print:bg-gray-200 print:text-gray-700">
+                                                                        {cut.angle}
+                                                                    </span>
+                                                                )}
+                                                                {cut.lighting && (
+                                                                    <span className="text-[10px] bg-white/10 px-2 py-0.5 rounded print:bg-gray-200 print:text-gray-700">
+                                                                        {cut.lighting}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+
+                                                            {/* 撮影指示 */}
+                                                            {cut.comments && (
+                                                                <div className="bg-white/5 rounded-lg p-2 print:bg-gray-100">
+                                                                    <p className="text-[10px] font-bold text-slate-400 mb-0.5">撮影指示</p>
+                                                                    <p className="text-xs text-slate-300 whitespace-pre-wrap print:text-gray-700">{cut.comments}</p>
+                                                                </div>
+                                                            )}
+
+                                                            {/* 使用商品 */}
+                                                            {cutProducts.length > 0 && (
+                                                                <div className="flex flex-wrap gap-1">
+                                                                    {cutProducts.map(prop => (
+                                                                        <span
+                                                                            key={prop.id}
+                                                                            className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded bg-blue-500/20 print:bg-blue-100"
+                                                                        >
+                                                                            <span className="material-symbols-outlined text-[10px] text-blue-400">inventory_2</span>
+                                                                            <span className="text-blue-300 print:text-blue-700">{prop.name}</span>
+                                                                        </span>
+                                                                    ))}
+                                                                </div>
+                                                            )}
+
+                                                            {/* 使用小物・衣装 */}
+                                                            {cutOtherProps.length > 0 && (
+                                                                <div className="flex flex-wrap gap-1">
+                                                                    {cutOtherProps.map(prop => (
+                                                                        <span
+                                                                            key={prop.id}
+                                                                            className={`inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded ${CATEGORIES[prop.category]?.bgColor} print:bg-gray-200`}
+                                                                        >
+                                                                            <span className={`material-symbols-outlined text-[10px] ${CATEGORIES[prop.category]?.color}`}>
+                                                                                {CATEGORIES[prop.category]?.icon}
                                                                             </span>
-                                                                        </div>
+                                                                            {prop.name}
+                                                                        </span>
+                                                                    ))}
+                                                                </div>
+                                                            )}
 
-                                                                        {/* タグ */}
-                                                                        <div className="flex flex-wrap gap-1.5">
-                                                                            {cut.angle && (
-                                                                                <span className="text-[10px] bg-white/10 px-2 py-0.5 rounded print:bg-gray-200 print:text-gray-700">
-                                                                                    {cut.angle}
-                                                                                </span>
-                                                                            )}
-                                                                            {cut.lighting && (
-                                                                                <span className="text-[10px] bg-white/10 px-2 py-0.5 rounded print:bg-gray-200 print:text-gray-700">
-                                                                                    {cut.lighting}
-                                                                                </span>
-                                                                            )}
-                                                                        </div>
-
-                                                                        {/* 撮影指示 */}
-                                                                        {cut.comments && (
-                                                                            <div className="bg-white/5 rounded-lg p-2 print:bg-gray-100">
-                                                                                <p className="text-[10px] font-bold text-slate-400 mb-0.5">撮影指示</p>
-                                                                                <p className="text-xs text-slate-300 whitespace-pre-wrap print:text-gray-700">{cut.comments}</p>
+                                                            {/* 出演モデル */}
+                                                            {getModelsForCut(cut).length > 0 && (
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="material-symbols-outlined text-xs text-pink-400">person</span>
+                                                                    <div className="flex items-center gap-1">
+                                                                        {getModelsForCut(cut).map(model => (
+                                                                            <div key={model.id} className="flex items-center gap-1 bg-pink-500/20 px-1.5 py-0.5 rounded print:bg-pink-100">
+                                                                                {model.image && (
+                                                                                    <img src={model.image} alt="" className="w-4 h-4 rounded-full object-cover" />
+                                                                                )}
+                                                                                <span className="text-[9px] text-pink-400 print:text-pink-700">{model.name}</span>
                                                                             </div>
-                                                                        )}
-
-                                                                        {/* 使用アイテム */}
-                                                                        {cutProps.length > 0 && (
-                                                                            <div className="flex flex-wrap gap-1">
-                                                                                {cutProps.map(prop => (
-                                                                                    <span
-                                                                                        key={prop.id}
-                                                                                        className={`inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded ${CATEGORIES[prop.category]?.bgColor} print:bg-gray-200`}
-                                                                                    >
-                                                                                        <span className={`material-symbols-outlined text-[10px] ${CATEGORIES[prop.category]?.color}`}>
-                                                                                            {CATEGORIES[prop.category]?.icon}
-                                                                                        </span>
-                                                                                        {prop.name}
-                                                                                    </span>
-                                                                                ))}
-                                                                            </div>
-                                                                        )}
-
-                                                                        {/* 出演モデル */}
-                                                                        {getModelsForCut(cut).length > 0 && (
-                                                                            <div className="flex items-center gap-2">
-                                                                                <span className="material-symbols-outlined text-xs text-pink-400">person</span>
-                                                                                <div className="flex items-center gap-1">
-                                                                                    {getModelsForCut(cut).map(model => (
-                                                                                        <div key={model.id} className="flex items-center gap-1 bg-pink-500/20 px-1.5 py-0.5 rounded print:bg-pink-100">
-                                                                                            {model.image && (
-                                                                                                <img src={model.image} alt="" className="w-4 h-4 rounded-full object-cover" />
-                                                                                            )}
-                                                                                            <span className="text-[9px] text-pink-400 print:text-pink-700">{model.name}</span>
-                                                                                        </div>
-                                                                                    ))}
-                                                                                </div>
-                                                                            </div>
-                                                                        )}
+                                                                        ))}
                                                                     </div>
                                                                 </div>
-                                                            </article>
-                                                        );
-                                                    })}
-                                                </div>
-                                            </div>
-                                        ))}
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </article>
+                                            );
+                                        })}
                                     </div>
                                 </div>
                             ))}
@@ -767,49 +706,78 @@ const FinalPreview = () => {
                     </div>
                 )}
 
-                {/* カット一覧（画像付き） */}
-                {project.cuts.length > 0 && (
+                {/* カット一覧（シーン別・重複なし） */}
+                {cutsByScene.length > 0 && (
                     <div style={{ marginBottom: '24px' }}>
                         <h2 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '12px', paddingBottom: '4px', borderBottom: '1px solid #d1d5db' }}>撮影カット一覧</h2>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
-                            {project.cuts.map((cut, idx) => (
-                                <div key={cut.id} style={{ border: '1px solid #d1d5db', borderRadius: '8px', overflow: 'hidden' }}>
-                                    <div style={{ display: 'flex', gap: '12px', padding: '12px' }}>
-                                        {/* カット画像 */}
-                                        <div style={{ width: '100px', height: '75px', borderRadius: '6px', overflow: 'hidden', backgroundColor: '#e5e7eb', flexShrink: 0 }}>
-                                            {cut.aiGeneratedImage ? (
-                                                <img src={cut.aiGeneratedImage} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                            ) : cut.originalImage ? (
-                                                <img src={cut.originalImage} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                            ) : (
-                                                <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9ca3af' }}>
-                                                    <span style={{ fontSize: '24px' }}>📷</span>
-                                                </div>
-                                            )}
-                                        </div>
-                                        {/* カット情報 */}
-                                        <div style={{ flex: 1, minWidth: 0 }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                                                <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#2563eb' }}>
-                                                    #{String(idx + 1).padStart(2, '0')}
-                                                </span>
-                                                {cut.scene && (
-                                                    <span style={{ fontSize: '10px', color: '#6b7280', backgroundColor: '#f3f4f6', padding: '2px 6px', borderRadius: '4px' }}>
-                                                        {cut.scene}
-                                                    </span>
-                                                )}
-                                            </div>
-                                            <p style={{ fontSize: '13px', fontWeight: 'bold', marginBottom: '4px' }}>{cut.title}</p>
-                                            {cut.comments && (
-                                                <p style={{ fontSize: '11px', color: '#4b5563', lineHeight: '1.4' }}>
-                                                    {cut.comments.length > 80 ? cut.comments.slice(0, 80) + '...' : cut.comments}
-                                                </p>
-                                            )}
-                                        </div>
-                                    </div>
+                        {cutsByScene.map((group) => (
+                            <div key={group.sceneName} style={{ marginBottom: '16px' }}>
+                                {/* シーンヘッダー */}
+                                <div style={{ backgroundColor: '#f3e8ff', padding: '8px 12px', borderRadius: '6px 6px 0 0', border: '1px solid #d8b4fe', borderBottom: 'none', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <span style={{ fontSize: '14px', fontWeight: 'bold', color: '#7c3aed' }}>{group.sceneName}</span>
+                                    <span style={{ fontSize: '12px', color: '#6b7280', marginLeft: 'auto' }}>{group.cuts.length}カット</span>
                                 </div>
-                            ))}
-                        </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', padding: '12px', border: '1px solid #d1d5db', borderRadius: '0 0 8px 8px' }}>
+                                    {group.cuts.map((cut) => {
+                                        const cutProps = getPropsForCut(id, cut.id);
+                                        const globalIndex = project.cuts.findIndex(c => c.id === cut.id);
+                                        return (
+                                            <div key={cut.id} style={{ border: '1px solid #d1d5db', borderRadius: '8px', overflow: 'hidden' }}>
+                                                <div style={{ display: 'flex', gap: '12px', padding: '12px' }}>
+                                                    <div style={{ width: '100px', height: '75px', borderRadius: '6px', overflow: 'hidden', backgroundColor: '#e5e7eb', flexShrink: 0 }}>
+                                                        {cut.aiGeneratedImage ? (
+                                                            <img src={cut.aiGeneratedImage} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                                        ) : cut.originalImage ? (
+                                                            <img src={cut.originalImage} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                                        ) : (
+                                                            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9ca3af' }}>
+                                                                <span style={{ fontSize: '24px' }}>📷</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                                                            <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#2563eb' }}>
+                                                                #{String(globalIndex + 1).padStart(2, '0')}
+                                                            </span>
+                                                            <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                                                                {cut.angle && (
+                                                                    <span style={{ fontSize: '10px', color: '#6b7280', backgroundColor: '#f3f4f6', padding: '2px 6px', borderRadius: '4px' }}>{cut.angle}</span>
+                                                                )}
+                                                                {cut.lighting && (
+                                                                    <span style={{ fontSize: '10px', color: '#6b7280', backgroundColor: '#f3f4f6', padding: '2px 6px', borderRadius: '4px' }}>{cut.lighting}</span>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                        <p style={{ fontSize: '13px', fontWeight: 'bold', marginBottom: '4px' }}>{cut.title}</p>
+                                                        {cut.comments && (
+                                                            <p style={{ fontSize: '11px', color: '#4b5563', lineHeight: '1.4', marginBottom: '4px' }}>
+                                                                {cut.comments.length > 100 ? cut.comments.slice(0, 100) + '...' : cut.comments}
+                                                            </p>
+                                                        )}
+                                                        {cutProps.length > 0 && (
+                                                            <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                                                                {cutProps.map(prop => (
+                                                                    <span key={prop.id} style={{
+                                                                        fontSize: '9px',
+                                                                        padding: '2px 6px',
+                                                                        borderRadius: '4px',
+                                                                        backgroundColor: prop.category === 'product' ? '#dbeafe' : prop.category === 'costume' ? '#fce7f3' : '#fef3c7',
+                                                                        color: prop.category === 'product' ? '#1d4ed8' : prop.category === 'costume' ? '#be185d' : '#b45309',
+                                                                    }}>
+                                                                        {prop.name}
+                                                                    </span>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        ))}
                     </div>
                 )}
 
